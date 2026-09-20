@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build artifacts
+dist/
+dist-ssr/
+*.local
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Android build outputs
+android/app/build/
+android/.gradle/
+android/local.properties
+*.apk
+
+# Editor / System
+.vscode/
+.idea/
+.DS_Store
+*.log
+download-git.ps1
