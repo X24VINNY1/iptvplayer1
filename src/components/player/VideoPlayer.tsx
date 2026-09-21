@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw, Zap } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 import { LiveStream } from '@/types';
 
@@ -10,9 +10,11 @@ interface VideoPlayerProps {
   title?: string;
   type?: 'live' | 'vod' | 'series';
   currentFormat?: string;
+  connectionMode?: 'proxy' | 'direct';
   onBack?: () => void;
   autoPlay?: boolean;
   onFormatFallback?: () => void;
+  onToggleRoute?: () => void;
   onSelectChannel?: (channel: LiveStream) => void;
 }
 
@@ -21,14 +23,17 @@ export default function VideoPlayer({
   title,
   type = 'vod',
   currentFormat = 'AUTO',
+  connectionMode = 'direct',
   onBack,
   autoPlay = true,
   onFormatFallback,
+  onToggleRoute,
   onSelectChannel
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showControls, setShowControls] = useState(true);
+  const [slowBufferHint, setSlowBufferHint] = useState(false);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
   // Hook up video player engine & events
@@ -46,15 +51,30 @@ export default function VideoPlayer({
 
   useEffect(() => {
     reset();
+    setSlowBufferHint(false);
     return () => reset();
   }, [src]);
+
+  // If buffering takes more than 3.5 seconds, display the fast fallback switch option
+  useEffect(() => {
+    let timer: NodeJS.Timeout | null = null;
+    if (isLoading) {
+      timer = setTimeout(() => {
+        setSlowBufferHint(true);
+      }, 3500);
+    } else {
+      setSlowBufferHint(false);
+    }
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [isLoading]);
 
   const handleUserActivity = () => {
     setShowControls(true);
     if (hideControlsTimeout.current) {
       clearTimeout(hideControlsTimeout.current);
     }
-    // Only auto-hide if playing smoothly without loading or error
     if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading && !error) {
       hideControlsTimeout.current = setTimeout(() => {
         if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading && !error) {
@@ -72,7 +92,7 @@ export default function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [setIsFullscreen]);
 
-  // Keyboard & D-Pad navigation for Android TV remotes & web shortcuts
+  // Keyboard & D-Pad navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       handleUserActivity();
@@ -197,7 +217,7 @@ export default function VideoPlayer({
         </button>
       )}
 
-      {/* Click to Start Playback Overlay (Bypasses Browser Autoplay Restrictions) */}
+      {/* Click to Start Playback Overlay */}
       {!isLoading && !error && (!isPlaying || (videoRef.current && videoRef.current.paused)) && (
         <div 
           onClick={(e) => {
@@ -218,13 +238,26 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Loading Spinner Overlay */}
+      {/* Loading Spinner Overlay with Fast Route Switcher */}
       {isLoading && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 pointer-events-none">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 pointer-events-auto">
           <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-3" />
-          <p className="text-gray-300 text-xs font-medium tracking-wide animate-pulse">
+          <p className="text-gray-300 text-xs font-medium tracking-wide animate-pulse mb-3">
             Connecting & Buffering Stream...
           </p>
+
+          {/* If buffering takes more than 3.5 seconds, give the user 1-click route swap */}
+          {slowBufferHint && onToggleRoute && (
+            <button
+              onClick={onToggleRoute}
+              className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all active:scale-95 animate-fade-in"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-300" />
+              <span>
+                Buffering slow? Switch to {connectionMode === 'proxy' ? 'Direct Stream' : 'Proxy Route'}
+              </span>
+            </button>
+          )}
         </div>
       )}
 
@@ -238,11 +271,22 @@ export default function VideoPlayer({
           <p className="text-gray-300 mb-6 max-w-md text-xs sm:text-sm leading-relaxed">{error}</p>
           
           <div className="flex flex-wrap items-center justify-center gap-3 max-w-md">
+            {/* Toggle Route between Proxy and Direct */}
+            {onToggleRoute && (
+              <button
+                onClick={onToggleRoute}
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+              >
+                <Zap className="w-4 h-4 text-amber-300" />
+                Switch to {connectionMode === 'proxy' ? 'Direct Stream' : 'Proxy Stream'}
+              </button>
+            )}
+
             {/* Auto-Fix Format Switcher */}
             {onFormatFallback && (
               <button
                 onClick={onFormatFallback}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+                className="bg-gray-800 hover:bg-gray-700 text-gray-200 px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
               >
                 <RefreshCw className="w-4 h-4" />
                 Switch Format (MP4 / HLS)
@@ -283,9 +327,11 @@ export default function VideoPlayer({
           isLive={type === 'live'}
           title={title}
           currentFormat={currentFormat}
+          connectionMode={connectionMode}
           onBack={onBack}
           onFlushAndResync={flushAndResync}
           onToggleFormat={onFormatFallback}
+          onToggleRoute={onToggleRoute}
           onSelectChannel={onSelectChannel}
         />
       </div>

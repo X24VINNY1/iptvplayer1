@@ -44,18 +44,47 @@ export const buildStreamUrl = (
 };
 
 /**
- * Resolves the optimal playback stream URL.
- * In Web browsers (especially on HTTPS like Render), it routes through the backend /proxy
- * endpoint to eliminate Mixed Content (HTTP -> HTTPS) and CORS restrictions completely.
+ * Extracts the original target stream URL from any proxy wrapper.
  */
-export const getStreamPlaybackUrl = (rawUrl: string): string => {
+export const extractRawStreamUrl = (url: string): string => {
+  if (!url) return '';
+  if (url.includes('/proxy?url=')) {
+    try {
+      const idx = url.indexOf('/proxy?url=');
+      const encoded = url.substring(idx + 11);
+      return decodeURIComponent(encoded);
+    } catch {
+      return url;
+    }
+  }
+  return url;
+};
+
+/**
+ * Resolves the playback stream URL with auto-selection or explicit mode override.
+ */
+export const getStreamPlaybackUrl = (rawUrl: string, mode?: 'proxy' | 'direct'): string => {
   if (!rawUrl) return '';
+
+  const cleanRawUrl = extractRawStreamUrl(rawUrl);
+
+  if (mode === 'direct') {
+    return cleanRawUrl;
+  }
+
+  if (mode === 'proxy') {
+    return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
+  }
 
   // Inside Native Android APK, cleartext traffic is enabled so direct stream URL is optimal
   if (Capacitor.isNativePlatform()) {
-    return rawUrl;
+    return cleanRawUrl;
   }
 
-  // In Web browser environments, route through the streaming proxy
-  return `/proxy?url=${encodeURIComponent(rawUrl)}`;
+  // In Web browser environments on HTTPS, route through the streaming proxy to bypass Mixed Content & CORS
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && cleanRawUrl.startsWith('http://')) {
+    return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
+  }
+
+  return cleanRawUrl;
 };

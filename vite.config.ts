@@ -51,7 +51,6 @@ function streamProxyPlugin() {
           return res.end('Missing "url" query parameter');
         }
 
-        const isM3U8 = targetUrl.toLowerCase().includes('.m3u8');
         const outgoingHeaders: Record<string, string> = {
           'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
           'Accept': '*/*',
@@ -71,46 +70,55 @@ function streamProxyPlugin() {
           return res.end();
         }
 
+        const isLikelyM3u8 = targetUrl.toLowerCase().includes('.m3u8') || targetUrl.includes('/live/');
+
         try {
-          if (isM3U8) {
+          if (isLikelyM3u8) {
             const response = await axios({
               method: 'get',
               url: targetUrl,
               responseType: 'text',
               headers: outgoingHeaders,
-              timeout: 15000,
+              timeout: 10000,
+              maxRedirects: 5,
+              validateStatus: (status) => status < 400,
             });
 
-            const rewritten = rewriteM3U8(response.data, targetUrl, '/proxy?url=');
-            res.statusCode = 200;
-            res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-            return res.end(rewritten);
-          } else {
-            const response = await axios({
-              method: 'get',
-              url: targetUrl,
-              responseType: 'stream',
-              headers: outgoingHeaders,
-              timeout: 30000,
-              maxContentLength: Infinity,
-              maxBodyLength: Infinity,
-            });
-
-            res.statusCode = response.status;
-            const headers = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
-            for (const h of headers) {
-              if (response.headers[h]) res.setHeader(h, response.headers[h]);
+            const dataStr = typeof response.data === 'string' ? response.data : '';
+            if (dataStr.includes('#EXTM3U') || targetUrl.toLowerCase().includes('.m3u8')) {
+              const finalUrl = (response.request as any)?.res?.responseUrl || targetUrl;
+              const rewritten = rewriteM3U8(dataStr, finalUrl, '/proxy?url=');
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+              return res.end(rewritten);
             }
-            if (!response.headers['accept-ranges']) res.setHeader('Accept-Ranges', 'bytes');
-
-            req.on('close', () => {
-              if (response.data && typeof response.data.destroy === 'function') {
-                response.data.destroy();
-              }
-            });
-
-            return response.data.pipe(res);
           }
+
+          const response = await axios({
+            method: 'get',
+            url: targetUrl,
+            responseType: 'stream',
+            headers: outgoingHeaders,
+            timeout: 20000,
+            maxRedirects: 5,
+            maxContentLength: Infinity,
+            maxBodyLength: Infinity,
+          });
+
+          res.statusCode = response.status;
+          const headers = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+          for (const h of headers) {
+            if (response.headers[h]) res.setHeader(h, response.headers[h]);
+          }
+          if (!response.headers['accept-ranges']) res.setHeader('Accept-Ranges', 'bytes');
+
+          req.on('close', () => {
+            if (response.data && typeof response.data.destroy === 'function') {
+              response.data.destroy();
+            }
+          });
+
+          return response.data.pipe(res);
         } catch (err: any) {
           console.warn('[Vite Proxy Warn]', err.message);
           if (!res.headersSent) {

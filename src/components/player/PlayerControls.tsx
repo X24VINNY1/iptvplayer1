@@ -14,9 +14,11 @@ interface PlayerControlsProps {
   isLive?: boolean;
   title?: string;
   currentFormat?: string;
+  connectionMode?: 'proxy' | 'direct';
   onBack?: () => void;
   onFlushAndResync?: () => void;
   onToggleFormat?: () => void;
+  onToggleRoute?: () => void;
   onSelectChannel?: (channel: LiveStream) => void;
 }
 
@@ -26,9 +28,11 @@ export default function PlayerControls({
   isLive,
   title,
   currentFormat = 'AUTO',
+  connectionMode = 'direct',
   onBack,
   onFlushAndResync,
   onToggleFormat,
+  onToggleRoute,
   onSelectChannel
 }: PlayerControlsProps) {
   const { 
@@ -196,6 +200,22 @@ export default function PlayerControls({
               title="Click to toggle stream container format (MP4, HLS, TS)"
             >
               Format: <span className="text-indigo-400">{currentFormat.toUpperCase()}</span>
+            </button>
+          )}
+
+          {/* Connection Route Switcher (Proxy vs Direct) */}
+          {onToggleRoute && (
+            <button
+              onClick={onToggleRoute}
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg transition-all active:scale-95 flex items-center gap-1.5 ${
+                connectionMode === 'proxy'
+                  ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 hover:bg-indigo-600/50'
+                  : 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 hover:bg-emerald-600/50'
+              }`}
+              title="Toggle stream connection route between Proxy (for HTTPS web) and Direct"
+            >
+              <Zap className="w-3.5 h-3.5 text-amber-400" />
+              <span>{connectionMode === 'proxy' ? 'Proxy Route' : 'Direct Stream'}</span>
             </button>
           )}
 

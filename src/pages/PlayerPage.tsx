@@ -10,6 +10,7 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { LiveStream } from '@/types';
 import { ArrowLeft } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
 
 const PlayerPage: React.FC = () => {
   const { type, streamId } = useParams<{ type: 'live' | 'vod' | 'series'; streamId: string }>();
@@ -28,6 +29,13 @@ const PlayerPage: React.FC = () => {
   // Normalize mkv/avi to mp4 for universal HTML5 browser decoder support
   const normalizedExt = (type !== 'live' && (validExt === 'mkv' || validExt === 'avi')) ? 'mp4' : validExt;
   const [currentExt, setCurrentExt] = useState<string>(normalizedExt);
+
+  // Connection mode: Proxy by default on HTTPS web to bypass CORS/mixed content, Direct on Android/HTTP
+  const initialMode: 'proxy' | 'direct' = 
+    !Capacitor.isNativePlatform() && typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? 'proxy'
+      : 'direct';
+  const [connectionMode, setConnectionMode] = useState<'proxy' | 'direct'>(initialMode);
 
   const [streamUrl, setStreamUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -74,9 +82,9 @@ const PlayerPage: React.FC = () => {
       return;
     }
 
-    // Convert to optimal playback URL (routes through streaming proxy on Web to bypass Mixed Content & CORS)
-    const effectivePlaybackUrl = getStreamPlaybackUrl(rawUrl);
-    console.log(`[OnyxStream] Playing ${type} stream via web proxy:`, effectivePlaybackUrl);
+    // Resolve playback URL based on current connectionMode
+    const effectivePlaybackUrl = getStreamPlaybackUrl(rawUrl, connectionMode);
+    console.log(`[OnyxStream] Playing ${type} stream [mode: ${connectionMode}]:`, effectivePlaybackUrl);
     setStreamUrl(effectivePlaybackUrl);
 
     // Add to history
@@ -94,7 +102,7 @@ const PlayerPage: React.FC = () => {
       containerExtension: currentExt,
     });
 
-  }, [type, streamId, api, directUrl, currentExt, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
+  }, [type, streamId, api, directUrl, currentExt, connectionMode, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
 
   // Handle unmount to save progress
   useEffect(() => {
@@ -115,6 +123,10 @@ const PlayerPage: React.FC = () => {
     } else {
       setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : 'mp4'));
     }
+  };
+
+  const toggleConnectionRoute = () => {
+    setConnectionMode(prev => (prev === 'proxy' ? 'direct' : 'proxy'));
   };
 
   const handleSelectChannel = (channel: LiveStream) => {
@@ -164,8 +176,10 @@ const PlayerPage: React.FC = () => {
           title={title} 
           type={type as 'live' | 'vod' | 'series'} 
           currentFormat={currentExt}
+          connectionMode={connectionMode}
           onBack={handleBack}
           onFormatFallback={toggleStreamFormat}
+          onToggleRoute={toggleConnectionRoute}
           onSelectChannel={handleSelectChannel}
         />
       </div>

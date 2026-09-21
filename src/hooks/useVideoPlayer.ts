@@ -18,7 +18,6 @@ export function useVideoPlayer(
     isMuted,
     antiLagEnabled,
     antiLagMode,
-    useProxy,
     setBufferLength,
     incrementLagRecovery
   } = usePlayerStore();
@@ -29,8 +28,18 @@ export function useVideoPlayer(
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
   const blobUrlRef = useRef<string | null>(null);
+  const bufferingWatchdogRef = useRef<NodeJS.Timeout | null>(null);
+
+  const clearBufferingWatchdog = useCallback(() => {
+    if (bufferingWatchdogRef.current) {
+      clearTimeout(bufferingWatchdogRef.current);
+      bufferingWatchdogRef.current = null;
+    }
+  }, []);
 
   const cleanup = useCallback(() => {
+    clearBufferingWatchdog();
+
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
@@ -51,9 +60,9 @@ export function useVideoPlayer(
         console.warn('Error loading video after cleanup:', e);
       }
     }
-  }, [videoRef]);
+  }, [videoRef, clearBufferingWatchdog]);
 
-  // Robust HLS config tuned for IPTV streams
+  // Fast-reacting HLS config tuned for low latency & fast initial buffer
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
     const baseConfig = {
       enableWorker: true,
@@ -64,9 +73,10 @@ export function useVideoPlayer(
       nudgeOffset: 0.2,
       nudgeMaxRetry: 8,
       maxFragLookUpTolerance: 0.3,
-      fragLoadingTimeOut: 20000,
-      manifestLoadingTimeOut: 20000,
-      levelLoadingTimeOut: 20000,
+      // Aggressive fast timeouts so we never hang indefinitely on dead streams
+      fragLoadingTimeOut: 10000,
+      manifestLoadingTimeOut: 8000,
+      levelLoadingTimeOut: 8000,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
       }
@@ -76,24 +86,24 @@ export function useVideoPlayer(
       case 'smooth':
         return {
           ...baseConfig,
-          maxBufferLength: 45,
-          maxMaxBufferLength: 90,
-          maxBufferSize: 70 * 1000 * 1000,
-          backBufferLength: 30,
-          liveSyncDurationCount: 4,
-          liveMaxLatencyDurationCount: 12,
+          maxBufferLength: 40,
+          maxMaxBufferLength: 80,
+          maxBufferSize: 60 * 1000 * 1000,
+          backBufferLength: 20,
+          liveSyncDurationCount: 3,
+          liveMaxLatencyDurationCount: 10,
           maxLiveSyncPlaybackRate: 1.15,
           lowLatencyMode: false
         };
       case 'balanced':
         return {
           ...baseConfig,
-          maxBufferLength: 25,
-          maxMaxBufferLength: 60,
-          maxBufferSize: 40 * 1000 * 1000,
-          backBufferLength: 20,
+          maxBufferLength: 20,
+          maxMaxBufferLength: 45,
+          maxBufferSize: 30 * 1000 * 1000,
+          backBufferLength: 15,
           liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 8,
+          liveMaxLatencyDurationCount: 7,
           maxLiveSyncPlaybackRate: 1.1,
           lowLatencyMode: true
         };
@@ -102,10 +112,10 @@ export function useVideoPlayer(
           ...baseConfig,
           maxBufferLength: 10,
           maxMaxBufferLength: 20,
-          maxBufferSize: 20 * 1000 * 1000,
+          maxBufferSize: 15 * 1000 * 1000,
           backBufferLength: 10,
           liveSyncDurationCount: 2,
-          liveMaxLatencyDurationCount: 5,
+          liveMaxLatencyDurationCount: 4,
           lowLatencyMode: true
         };
     }
@@ -126,10 +136,36 @@ export function useVideoPlayer(
     video.volume = volume;
     video.muted = isMuted;
 
+    // Buffering Watchdog: if stream doesn't produce playback within 8s, stop the infinite spinning
+    clearBufferingWatchdog();
+    bufferingWatchdogRef.current = setTimeout(() => {
+      if (video && video.paused && video.readyState < 2) {
+        console.warn('[OnyxStream Watchdog] Initial stream buffering taking longer than expected.');
+        if (hlsRef.current) {
+          hlsRef.current.startLoad(0);
+        }
+        // Give 4 more seconds, then show helpful action buttons instead of hanging
+        setTimeout(() => {
+          if (video && video.paused && video.readyState < 2) {
+            setIsLoading(false);
+            setError(
+              'Stream connection is taking longer than usual. Use "Switch Route" or "Switch Format" below to reconnect.'
+            );
+          }
+        }, 4000);
+      }
+    }, 8000);
+
+    const onPlaybackStarted = () => {
+      clearBufferingWatchdog();
+      setIsLoading(false);
+      setError(null);
+    };
+
     // Standard HTML5 media event listeners
     video.onplay = () => {
       setIsPlaying(true);
-      setIsLoading(false);
+      onPlaybackStarted();
     };
 
     video.onpause = () => {
@@ -141,15 +177,15 @@ export function useVideoPlayer(
     };
 
     video.onplaying = () => {
-      setIsLoading(false);
+      onPlaybackStarted();
       stallCounterRef.current = 0;
     };
 
     video.oncanplay = () => {
-      setIsLoading(false);
+      onPlaybackStarted();
       if (autoPlay) {
         video.play().catch((e) => {
-          console.warn('[OnyxStream] Autoplay waiting for user gesture:', e.message);
+          console.warn('[OnyxStream] Autoplay waiting for user interaction:', e.message);
         });
       }
     };
@@ -179,63 +215,57 @@ export function useVideoPlayer(
       if (!isNaN(video.duration) && isFinite(video.duration)) {
         setDuration(video.duration);
       }
-      setIsLoading(false);
+      onPlaybackStarted();
     };
 
     // Video element error handler
     video.onerror = () => {
+      clearBufferingWatchdog();
       const err = video.error;
       console.warn('[OnyxStream] Video error:', err?.code, err?.message);
 
-      // If HLS is active, let HLS try to recover the media pipeline first
       if (hlsRef.current && mediaRecoveriesRef.current < 2) {
         mediaRecoveriesRef.current += 1;
-        console.log(`[Anti-Lag] Recovering media error (attempt ${mediaRecoveriesRef.current})...`);
         hlsRef.current.recoverMediaError();
         return;
       }
 
-      let errorMsg = 'Playback Error: Stream format unsupported by browser decoder. Launch in VLC, MX Player, or Native Player.';
+      let errorMsg = 'Playback Error: Stream format unsupported by browser decoder. Try switching format or connection route.';
       if (err?.code === 2) {
-        errorMsg = 'Network Error: Stream server dropped connection or is unreachable.';
+        errorMsg = 'Network Error: Stream connection was interrupted or server is unreachable.';
       } else if (err?.code === 4) {
-        errorMsg = 'Decoder Error: Audio/Video codec not supported by browser. Launch in VLC or Native Player.';
+        errorMsg = 'Format Error: Audio/Video codec not supported by browser. Try switching format.';
       }
 
       setError(errorMsg);
       setIsLoading(false);
     };
 
-    // Source resolution
-    let effectiveSrc = src;
     const isHlsUrl =
       src.includes('.m3u8') ||
+      src.includes('m3u8') ||
       (type === 'live' && !src.endsWith('.mp4'));
-
-    if (useProxy && isHlsUrl) {
-      effectiveSrc = `https://cors.eu.org/${src}`;
-    }
 
     if (isHlsUrl && Hls.isSupported()) {
       const hlsConfig = getHlsConfig(antiLagMode);
       const hls = new Hls(hlsConfig);
       hlsRef.current = hls;
 
-      // Handle raw TS stream on HLS engine
-      if (effectiveSrc.endsWith('.ts') || (type === 'live' && !effectiveSrc.includes('.m3u8'))) {
-        const virtualM3u8 = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:60.0,\n${effectiveSrc}\n`;
+      // Handle raw TS stream on HLS engine by wrapping into a virtual manifest
+      if (src.endsWith('.ts') || (type === 'live' && !src.includes('.m3u8'))) {
+        const virtualM3u8 = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:60.0,\n${src}\n`;
         const blob = new Blob([virtualM3u8], { type: 'application/vnd.apple.mpegurl' });
         const blobUrl = URL.createObjectURL(blob);
         blobUrlRef.current = blobUrl;
         hls.loadSource(blobUrl);
       } else {
-        hls.loadSource(effectiveSrc);
+        hls.loadSource(src);
       }
 
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        setIsLoading(false);
+        onPlaybackStarted();
         networkErrorRetriesRef.current = 0;
         if (autoPlay) {
           video.play().catch((err) => {
@@ -258,10 +288,11 @@ export function useVideoPlayer(
             case Hls.ErrorTypes.NETWORK_ERROR:
               networkErrorRetriesRef.current += 1;
               if (networkErrorRetriesRef.current <= 2) {
-                console.log(`[Anti-Lag] Network error, restarting HLS loader (${networkErrorRetriesRef.current}/2)...`);
+                console.log(`[Anti-Lag] Network hiccup, reloading HLS (${networkErrorRetriesRef.current}/2)...`);
                 hls.startLoad();
               } else {
-                setError('Network Error: Stream server is not responding. Try VLC, MX Player, or Native Player.');
+                clearBufferingWatchdog();
+                setError('Network Error: Stream server did not respond. Tap "Switch Route" or "Retry".');
                 setIsLoading(false);
               }
               break;
@@ -277,14 +308,16 @@ export function useVideoPlayer(
                 hls.swapAudioCodec();
                 hls.recoverMediaError();
               } else {
-                setError('Codec Error: Decoder encountered unsupported stream format. Open in VLC or Native Player.');
+                clearBufferingWatchdog();
+                setError('Codec Error: Unsupported stream format. Try switching format.');
                 setIsLoading(false);
               }
               break;
 
             default:
               console.warn('[Anti-Lag] Fatal HLS error:', data.details);
-              setError(`Playback Error: ${data.details}. Open in VLC or Native Player.`);
+              clearBufferingWatchdog();
+              setError(`Playback notice: ${data.details}. Try switching connection route.`);
               setIsLoading(false);
               break;
           }
@@ -292,12 +325,12 @@ export function useVideoPlayer(
       });
     } else if (isHlsUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native Apple Safari HLS
-      video.src = effectiveSrc;
+      video.src = src;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
     } else {
       // Direct media playback (MP4, MKV, direct files)
-      video.src = effectiveSrc;
+      video.src = src;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
     }
@@ -310,7 +343,7 @@ export function useVideoPlayer(
     isMuted,
     antiLagMode,
     antiLagEnabled,
-    useProxy,
+    clearBufferingWatchdog,
     getHlsConfig,
     setIsLoading,
     setError,
@@ -321,7 +354,7 @@ export function useVideoPlayer(
     incrementLagRecovery
   ]);
 
-  // Anti-Lag Watchdog for freeze prevention
+  // Anti-Lag Watchdog for freeze prevention during active playback
   useEffect(() => {
     if (!antiLagEnabled) return;
 

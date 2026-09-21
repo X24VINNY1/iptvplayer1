@@ -32,6 +32,7 @@ app.get('/api/health', (req, res) => {
 /**
  * Rewrites an M3U8 manifest content so all segment paths and nested playlists
  * route cleanly through the same-origin /proxy endpoint over HTTPS with full CORS.
+ * Uses the final redirected URL (responseUrl) to ensure relative URLs resolve correctly.
  */
 function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
   const lines = content.split('\n');
@@ -70,7 +71,7 @@ function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
 
 /**
  * High-Performance IPTV Streaming Proxy
- * - Eliminates Mixed Content (HTTPS -> HTTP) and CORS blocks
+ * - Resolves IPTV server 302 redirects to find the real streaming edge
  * - Rewrites M3U8 playlists so all TS/AAC/MP4 segments stream through HTTPS
  * - Supports HTTP 206 Partial Content (Byte Range requests) for seeking and buffering MP4 VOD
  * - Emulates VLC/IPTVSmarters User-Agent so IPTV providers don't block web playback
@@ -81,9 +82,6 @@ const handleProxyRequest = async (req, res) => {
     return res.status(400).send('Missing "url" query parameter');
   }
 
-  const isM3U8 = targetUrl.toLowerCase().includes('.m3u8');
-
-  // Forward Range header if present (crucial for MP4 seeking and smooth video playback)
   const outgoingHeaders = {
     'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
     'Accept': '*/*',
@@ -94,68 +92,75 @@ const handleProxyRequest = async (req, res) => {
     outgoingHeaders['Range'] = req.headers.range;
   }
 
+  const isLikelyM3u8 = targetUrl.toLowerCase().includes('.m3u8') || targetUrl.includes('/live/');
+
   try {
-    if (isM3U8) {
+    if (isLikelyM3u8) {
       // Manifest request: fetch text and rewrite internal segment URLs
       const response = await axios({
         method: 'get',
         url: targetUrl,
         responseType: 'text',
         headers: outgoingHeaders,
-        timeout: 15000,
+        timeout: 10000,
+        maxRedirects: 5,
         validateStatus: (status) => status < 400
       });
 
-      const rewrittenManifest = rewriteM3U8(response.data, targetUrl, '/proxy?url=');
-      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      return res.status(200).send(rewrittenManifest);
-    } else {
-      // Media segment / video stream request: stream binary chunks with Range support
-      const response = await axios({
-        method: 'get',
-        url: targetUrl,
-        responseType: 'stream',
-        headers: outgoingHeaders,
-        timeout: 30000,
-        maxContentLength: Infinity,
-        maxBodyLength: Infinity,
-        validateStatus: (status) => status < 400
-      });
-
-      // Forward response status (200 OK or 206 Partial Content)
-      res.status(response.status);
-
-      // Forward crucial media streaming headers
-      const headersToForward = [
-        'content-type',
-        'content-length',
-        'content-range',
-        'accept-ranges',
-        'content-duration'
-      ];
-
-      for (const header of headersToForward) {
-        if (response.headers[header]) {
-          res.setHeader(header, response.headers[header]);
-        }
+      // If the response is actually an M3U8 playlist
+      const dataStr = typeof response.data === 'string' ? response.data : '';
+      if (dataStr.includes('#EXTM3U') || targetUrl.toLowerCase().includes('.m3u8')) {
+        // Resolve relative segment URLs against final redirected URL if available
+        const finalUrl = response.request?.res?.responseUrl || targetUrl;
+        const rewrittenManifest = rewriteM3U8(dataStr, finalUrl, '/proxy?url=');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        return res.status(200).send(rewrittenManifest);
       }
-
-      if (!response.headers['accept-ranges']) {
-        res.setHeader('Accept-Ranges', 'bytes');
-      }
-
-      // Clean up upstream connection if client closes connection early (e.g. user seeks or switches channel)
-      req.on('close', () => {
-        if (response.data && typeof response.data.destroy === 'function') {
-          response.data.destroy();
-        }
-      });
-
-      return response.data.pipe(res);
     }
+
+    // Binary media stream / video chunks (TS, MP4, MKV)
+    const response = await axios({
+      method: 'get',
+      url: targetUrl,
+      responseType: 'stream',
+      headers: outgoingHeaders,
+      timeout: 20000,
+      maxRedirects: 5,
+      maxContentLength: Infinity,
+      maxBodyLength: Infinity,
+      validateStatus: (status) => status < 400
+    });
+
+    res.status(response.status);
+
+    const headersToForward = [
+      'content-type',
+      'content-length',
+      'content-range',
+      'accept-ranges',
+      'content-duration'
+    ];
+
+    for (const header of headersToForward) {
+      if (response.headers[header]) {
+        res.setHeader(header, response.headers[header]);
+      }
+    }
+
+    if (!response.headers['accept-ranges']) {
+      res.setHeader('Accept-Ranges', 'bytes');
+    }
+
+    req.on('close', () => {
+      if (response.data && typeof response.data.destroy === 'function') {
+        response.data.destroy();
+      }
+    });
+
+    return response.data.pipe(res);
   } catch (error) {
-    console.warn(`[Proxy Warn] ${targetUrl}:`, error.message);
+    console.warn(`[Proxy Error] ${targetUrl}:`, error.message);
     if (!res.headersSent) {
       return res.status(502).json({
         error: 'Proxy Stream Error',
