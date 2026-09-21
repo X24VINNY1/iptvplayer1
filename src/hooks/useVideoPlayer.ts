@@ -34,10 +34,34 @@ export function useVideoPlayer(
   const bufferingWatchdogRef = useRef<NodeJS.Timeout | null>(null);
   const autoFallbackTriggeredRef = useRef<boolean>(false);
 
+  // Keep references to dynamic props to keep initPlayer stable
+  const onAutoFallbackFormatRef = useRef(onAutoFallbackFormat);
+  useEffect(() => {
+    onAutoFallbackFormatRef.current = onAutoFallbackFormat;
+  }, [onAutoFallbackFormat]);
+
+  const antiLagModeRef = useRef(antiLagMode);
+  useEffect(() => {
+    antiLagModeRef.current = antiLagMode;
+  }, [antiLagMode]);
+
+  const antiLagEnabledRef = useRef(antiLagEnabled);
+  useEffect(() => {
+    antiLagEnabledRef.current = antiLagEnabled;
+  }, [antiLagEnabled]);
+
   // Reset auto-fallback latch whenever source changes
   useEffect(() => {
     autoFallbackTriggeredRef.current = false;
   }, [src]);
+
+  // Synchronize volume and mute without tearing down or reinitializing the player
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.volume = volume;
+      videoRef.current.muted = isMuted;
+    }
+  }, [volume, isMuted, videoRef]);
 
   const clearBufferingWatchdog = useCallback(() => {
     if (bufferingWatchdogRef.current) {
@@ -172,10 +196,10 @@ export function useVideoPlayer(
 
         setTimeout(() => {
           if (video && video.paused && video.readyState < 2) {
-            if (!autoFallbackTriggeredRef.current && onAutoFallbackFormat) {
+            if (!autoFallbackTriggeredRef.current && onAutoFallbackFormatRef.current) {
               autoFallbackTriggeredRef.current = true;
               console.log('[OnyxStream Auto-Healing] Stream buffering timeout, auto-switching format...');
-              onAutoFallbackFormat();
+              onAutoFallbackFormatRef.current();
               return;
             }
             setIsLoading(false);
@@ -268,10 +292,10 @@ export function useVideoPlayer(
       }
 
       // 2. Automatic format auto-healing before giving up
-      if (err?.code === 4 && !autoFallbackTriggeredRef.current && onAutoFallbackFormat) {
+      if (err?.code === 4 && !autoFallbackTriggeredRef.current && onAutoFallbackFormatRef.current) {
         autoFallbackTriggeredRef.current = true;
         console.log('[OnyxStream Auto-Healing] Codec error code 4, auto-switching format...');
-        onAutoFallbackFormat();
+        onAutoFallbackFormatRef.current();
         return;
       }
 
@@ -469,12 +493,7 @@ export function useVideoPlayer(
     src,
     type,
     autoPlay,
-    onAutoFallbackFormat,
     cleanup,
-    volume,
-    isMuted,
-    antiLagMode,
-    antiLagEnabled,
     clearBufferingWatchdog,
     getHlsConfig,
     setIsLoading,
@@ -537,10 +556,13 @@ export function useVideoPlayer(
     return () => clearInterval(watchdog);
   }, [antiLagEnabled, type, incrementLagRecovery, videoRef]);
 
+  // Player lifecycle: runs strictly when stream source or type changes, never in a loop
   useEffect(() => {
     initPlayer();
-    return () => cleanup();
-  }, [initPlayer, cleanup]);
+    return () => {
+      cleanup();
+    };
+  }, [src, type, autoPlay]);
 
   const flushAndResync = () => {
     initPlayer();

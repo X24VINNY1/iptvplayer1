@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
@@ -20,7 +20,6 @@ const PlayerPage: React.FC = () => {
   const { serverUrl, username, password } = useAuthStore();
   const api = useXtreamAPI();
   const { addToHistory, updateProgress } = useHistoryStore();
-  const { currentTime, duration } = usePlayerStore();
 
   // Smart default format extension: preserve original container extension from server
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
@@ -46,15 +45,6 @@ const PlayerPage: React.FC = () => {
   const season = searchParams.get('season') ? parseInt(searchParams.get('season')!) : undefined;
   const episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : undefined;
   const seriesIdParam = searchParams.get('seriesId') ? parseInt(searchParams.get('seriesId')!) : undefined;
-
-  const currentProgressRef = useRef<number>(0);
-  const durationRef = useRef<number>(0);
-
-  // Track progress from player store
-  useEffect(() => {
-    currentProgressRef.current = currentTime;
-    durationRef.current = duration;
-  }, [currentTime, duration]);
 
   useEffect(() => {
     if (!type || !streamId) {
@@ -104,20 +94,21 @@ const PlayerPage: React.FC = () => {
 
   }, [type, streamId, api, directUrl, currentExt, connectionMode, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
 
-  // Handle unmount to save progress
+  // Unmount hook: save progress directly from Zustand state to avoid subscribing and re-rendering on every timeupdate
   useEffect(() => {
     return () => {
-      if ((type === 'vod' || type === 'series') && streamId && currentProgressRef.current > 0) {
-        updateProgress(parseInt(streamId), currentProgressRef.current, durationRef.current);
+      const { currentTime, duration } = usePlayerStore.getState();
+      if ((type === 'vod' || type === 'series') && streamId && currentTime > 0) {
+        updateProgress(parseInt(streamId), currentTime, duration);
       }
     };
   }, [type, streamId, updateProgress]);
 
-  const handleBack = () => {
+  const handleBack = useCallback(() => {
     navigate(-1);
-  };
+  }, [navigate]);
 
-  const toggleStreamFormat = () => {
+  const toggleStreamFormat = useCallback(() => {
     if (type === 'live') {
       setCurrentExt(prev => (prev === 'm3u8' ? 'ts' : 'm3u8'));
     } else {
@@ -127,19 +118,19 @@ const PlayerPage: React.FC = () => {
         return 'mp4';
       });
     }
-  };
+  }, [type]);
 
-  const toggleConnectionRoute = () => {
+  const toggleConnectionRoute = useCallback(() => {
     setConnectionMode(prev => (prev === 'proxy' ? 'direct' : 'proxy'));
-  };
+  }, []);
 
-  const handleSelectChannel = (channel: LiveStream) => {
+  const handleSelectChannel = useCallback((channel: LiveStream) => {
     if (channel.direct_source) {
       navigate(`/player/live/${channel.stream_id}?name=${encodeURIComponent(channel.name)}&directUrl=${encodeURIComponent(channel.direct_source)}`, { replace: true });
     } else {
       navigate(`/player/live/${channel.stream_id}?name=${encodeURIComponent(channel.name)}&icon=${encodeURIComponent(channel.stream_icon || '')}`, { replace: true });
     }
-  };
+  }, [navigate]);
 
   if (error) {
     return (
