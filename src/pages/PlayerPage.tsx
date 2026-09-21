@@ -5,6 +5,8 @@ import { useHistoryStore } from '@/store/useHistoryStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import { buildStreamUrl, getStreamPlaybackUrl } from '@/utils/url';
+import { useSettingsStore } from '@/store/useSettingsStore';
+import { openInNativePlayer, openInVlc, openInMxPlayer, openInSystemChooser, isNativeAndroid } from '@/utils/nativePlayer';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -20,6 +22,9 @@ const PlayerPage: React.FC = () => {
   const { serverUrl, username, password } = useAuthStore();
   const api = useXtreamAPI();
   const { addToHistory, updateProgress } = useHistoryStore();
+
+  const { preferredPlayer } = useSettingsStore();
+  const [nativePlayerAttempted, setNativePlayerAttempted] = useState(false);
 
   // Smart default format extension: m3u8 for live (HLS standard), mp4 for vod
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
@@ -42,6 +47,10 @@ const PlayerPage: React.FC = () => {
   const season = searchParams.get('season') ? parseInt(searchParams.get('season')!) : undefined;
   const episode = searchParams.get('episode') ? parseInt(searchParams.get('episode')!) : undefined;
   const seriesIdParam = searchParams.get('seriesId') ? parseInt(searchParams.get('seriesId')!) : undefined;
+
+  useEffect(() => {
+    setNativePlayerAttempted(false);
+  }, [type, streamId, currentExt, connectionMode]);
 
   useEffect(() => {
     if (!type || !streamId) {
@@ -90,6 +99,41 @@ const PlayerPage: React.FC = () => {
     });
 
   }, [type, streamId, api, directUrl, currentExt, connectionMode, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
+
+  // On Android TV: attempt to launch preferred native player
+  useEffect(() => {
+    if (!isNativeAndroid() || preferredPlayer === 'builtin' || nativePlayerAttempted || !streamUrl) return;
+    
+    setNativePlayerAttempted(true);
+    
+    // Build the raw direct URL (no proxy) for native player
+    const rawUrl = directUrl || (api 
+      ? (type === 'live' ? api.getLiveStreamUrl(parseInt(streamId!), currentExt)
+         : type === 'vod' ? api.getVodStreamUrl(parseInt(streamId!), currentExt)
+         : api.getSeriesStreamUrl(parseInt(streamId!), currentExt))
+      : buildStreamUrl(serverUrl, username, password, type === 'vod' ? 'movie' : (type as any), parseInt(streamId!), currentExt));
+    
+    const launch = async () => {
+      let success = false;
+      try {
+        if (preferredPlayer === 'vlc') {
+          success = await openInVlc(rawUrl, title);
+        } else if (preferredPlayer === 'mx') {
+          success = await openInMxPlayer(rawUrl, title);
+        } else if (preferredPlayer === 'chooser') {
+          success = await openInSystemChooser(rawUrl, title);
+        } else {
+          success = await openInNativePlayer(rawUrl, title, type === 'live');
+        }
+      } catch (err) {
+        console.warn('Native player launch failed, falling back to builtin:', err);
+      }
+      // If native player launched, we don't navigate back — the native activity overlays the WebView
+      // If it failed, the builtin WebView player continues as fallback
+    };
+    
+    launch();
+  }, [streamUrl, preferredPlayer, nativePlayerAttempted, type, streamId, currentExt, directUrl, api, serverUrl, username, password, title]);
 
   // Unmount hook: save progress directly from Zustand state to avoid subscribing and re-rendering on every timeupdate
   useEffect(() => {

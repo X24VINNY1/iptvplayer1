@@ -2,7 +2,8 @@ import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import { useContentStore } from '@/store/useContentStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw, Zap } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw, Zap, Smartphone } from 'lucide-react';
+import { openInNativePlayer, openInVlc, isNativeAndroid } from '@/utils/nativePlayer';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 import { LiveStream } from '@/types';
 
@@ -330,6 +331,26 @@ export default function VideoPlayer({
                 <RefreshCw className="w-4 h-4" />
                 Switch Format (MP4 / HLS)
               </button>
+            )}
+
+            {/* Native Player Fallback Buttons — only on Android TV */}
+            {isNativeAndroid() && (
+              <>
+                <button
+                  onClick={() => openInNativePlayer(src, title || 'OnyxStream', type === 'live')}
+                  className="bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-orange-600/30 active:scale-95"
+                >
+                  <Smartphone className="w-4 h-4" />
+                  Open in Native Player
+                </button>
+                <button
+                  onClick={() => openInVlc(src, title || 'OnyxStream')}
+                  className="bg-orange-800 hover:bg-orange-700 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-orange-700"
+                >
+                  <Play className="w-4 h-4" />
+                  Open in VLC
+                </button>
+              </>
             )}
 
             {/* Retry Stream */}

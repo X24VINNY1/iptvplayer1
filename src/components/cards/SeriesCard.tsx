@@ -43,8 +43,8 @@ const SeriesCard = React.memo(function SeriesCard({ series, onClick }: SeriesCar
 
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-80 group-hover:opacity-100 transition-opacity" />
 
-      <div className="absolute bottom-0 left-0 right-0 p-4">
-        <h3 className="text-white font-medium line-clamp-2 leading-tight">{series.name}</h3>
+      <div className="absolute bottom-0 left-0 right-0 p-2.5">
+        <h3 className="text-sm text-white font-medium line-clamp-2 leading-tight">{series.name}</h3>
       </div>
 
       {series.rating && parseFloat(series.rating) > 0 && (

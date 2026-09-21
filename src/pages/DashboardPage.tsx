@@ -49,21 +49,21 @@ const DashboardPage: React.FC = () => {
     const hiddenSet = new Set(
       liveCategories.filter((c) => isCategoryHidden('live', c.category_id)).map((c) => c.category_id)
     );
-    return liveStreams.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 14);
+    return liveStreams.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 20);
   }, [liveStreams, liveCategories, isCategoryHidden]);
 
   const visibleMovies = useMemo(() => {
     const hiddenSet = new Set(
       vodCategories.filter((c) => isCategoryHidden('vod', c.category_id)).map((c) => c.category_id)
     );
-    return vodStreams.filter((m) => !hiddenSet.has(m.category_id)).slice(0, 14);
+    return vodStreams.filter((m) => !hiddenSet.has(m.category_id)).slice(0, 20);
   }, [vodStreams, vodCategories, isCategoryHidden]);
 
   const visibleSeries = useMemo(() => {
     const hiddenSet = new Set(
       seriesCategories.filter((c) => isCategoryHidden('series', c.category_id)).map((c) => c.category_id)
     );
-    return seriesList.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 14);
+    return seriesList.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 20);
   }, [seriesList, seriesCategories, isCategoryHidden]);
 
   const handleLiveClick = (channel: LiveStream) => {
@@ -103,7 +103,7 @@ const DashboardPage: React.FC = () => {
         role="button"
         data-tv-focusable="true"
         data-tv-section="content"
-        className="flex-none w-64 mr-4 cursor-pointer group relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 transition-all duration-150 outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.04] focus:z-20"
+        className="flex-none w-52 mr-4 cursor-pointer group relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 transition-all duration-150 outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.04] focus:z-20"
         onClick={playItem}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
@@ -179,7 +179,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleLive.map(channel => (
-              <div key={channel.stream_id} className="flex-none w-56">
+              <div key={channel.stream_id} className="flex-none w-48">
                 <ChannelCard channel={channel} onClick={() => handleLiveClick(channel)} />
               </div>
             ))}
@@ -198,7 +198,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleMovies.map(movie => (
-              <div key={movie.stream_id} className="flex-none w-44">
+              <div key={movie.stream_id} className="flex-none w-32">
                 <MovieCard movie={movie} onClick={() => handleMovieClick(movie)} />
               </div>
             ))}
@@ -217,7 +217,7 @@ const DashboardPage: React.FC = () => {
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleSeries.map(item => (
-              <div key={item.series_id} className="flex-none w-44">
+              <div key={item.series_id} className="flex-none w-32">
                 <SeriesCard series={item} onClick={() => handleSeriesClick(item)} />
               </div>
             ))}

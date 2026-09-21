@@ -287,7 +287,7 @@ const MoviesPage: React.FC = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Hero Backdrop Banner */}
           {focusedMovie ? (
-            <div className="relative flex-none h-[38vh] min-h-[250px] max-h-[380px] w-full overflow-hidden border-b border-gray-800/80">
+            <div className="relative flex-none h-[30vh] min-h-[200px] max-h-[320px] w-full overflow-hidden border-b border-gray-800/80">
               {/* High-res backdrop or fallback to stream icon */}
               <div
                 className="absolute inset-0 bg-cover bg-center filter blur-[1px] transform scale-105 transition-all duration-700 opacity-40"
@@ -360,7 +360,7 @@ const MoviesPage: React.FC = () => {
 
           {/* Bottom Movie Poster Strip / Grid */}
           <div onScroll={handleListScroll} className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-8">
+            <div data-tv-section="content" className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9 2xl:grid-cols-10 gap-3 pb-8">
               {displayedMovies.map((movie, index) => {
                 const isFocused = (activeMovieId || focusedMovie?.stream_id) === movie.stream_id;
                 return (
@@ -409,7 +409,7 @@ const MoviesPage: React.FC = () => {
             </div>
           ) : (
             <>
-              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+              <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 xl:grid-cols-8 2xl:grid-cols-10 gap-3 pb-8">
                 {displayedMovies.map((movie, index) => (
                   <div
                     key={movie.stream_id}

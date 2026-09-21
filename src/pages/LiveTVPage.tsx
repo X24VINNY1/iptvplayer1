@@ -24,8 +24,10 @@ import {
   Maximize2,
   Radio,
   Play,
-  Search
+  Search,
+  Clock
 } from 'lucide-react';
+import EPGGuide from '@/components/tv/EPGGuide';
 
 const LiveTVPage: React.FC = () => {
   const navigate = useNavigate();
@@ -39,8 +41,8 @@ const LiveTVPage: React.FC = () => {
   const [dataLoading, setDataLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // OwnTV-inspired View Mode: 'preview' (split live player + list) vs 'grid'
-  const [viewMode, setViewMode] = useState<'preview' | 'grid'>('preview');
+  // OwnTV-inspired View Mode: 'epg' (EPG guide) vs 'preview' (split live player + list) vs 'grid'
+  const [viewMode, setViewMode] = useState<'epg' | 'preview' | 'grid'>('epg');
   const [previewChannel, setPreviewChannel] = useState<LiveStream | null>(null);
   const [channelSearch, setChannelSearch] = useState('');
   const [isMuted, setIsMuted] = useState(true);
@@ -303,6 +305,19 @@ const LiveTVPage: React.FC = () => {
             <div className="flex bg-gray-900 border border-gray-800 rounded-lg p-0.5">
               <button
                 data-tv-focusable="true"
+                onClick={() => setViewMode('epg')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
+                  viewMode === 'epg'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Electronic Program Guide"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                EPG Guide
+              </button>
+              <button
+                data-tv-focusable="true"
                 onClick={() => setViewMode('preview')}
                 className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
                   viewMode === 'preview'
@@ -372,7 +387,13 @@ const LiveTVPage: React.FC = () => {
       </div>
 
       {/* Main Content Area */}
-      {viewMode === 'preview' ? (
+      {viewMode === 'epg' ? (
+        <EPGGuide
+          channels={filteredStreams}
+          onSelectChannel={handleChannelClick}
+          focusedChannelId={focusedChannelId}
+        />
+      ) : viewMode === 'preview' ? (
         /* OwnTV Signature Split Preview Mode */
         <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
           {/* Left Column: Channel List */}

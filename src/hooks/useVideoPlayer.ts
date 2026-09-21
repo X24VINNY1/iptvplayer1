@@ -242,7 +242,7 @@ export function useVideoPlayer(
           }
         }, 5000);
       }
-    }, 6000);
+    }, 4000);
 
     const onPlaybackStarted = () => {
       if (currentSession !== playbackSessionIdRef.current) return;
