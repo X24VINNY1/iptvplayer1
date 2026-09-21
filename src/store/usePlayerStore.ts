@@ -19,6 +19,7 @@ interface PlayerState {
   antiLagMode: AntiLagMode;
   bufferLength: number; // Seconds buffered ahead
   lagRecoveries: number; // Count of auto-stalls bypassed
+  useProxy: boolean; // HTTPS/CORS proxy mode for browser playback
 
   setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
@@ -34,6 +35,8 @@ interface PlayerState {
   setAntiLagMode: (mode: AntiLagMode) => void;
   setBufferLength: (secs: number) => void;
   incrementLagRecovery: () => void;
+  setUseProxy: (useProxy: boolean) => void;
+  toggleProxy: () => void;
   
   toggleMute: () => void;
   incrementReconnect: () => void;
@@ -56,6 +59,7 @@ const initialState = {
   antiLagMode: 'smooth' as AntiLagMode,
   bufferLength: 0,
   lagRecoveries: 0,
+  useProxy: false,
 };
 
 export const usePlayerStore = create<PlayerState>((set) => ({
@@ -75,6 +79,8 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setAntiLagMode: (antiLagMode) => set({ antiLagMode }),
   setBufferLength: (bufferLength) => set({ bufferLength }),
   incrementLagRecovery: () => set((state) => ({ lagRecoveries: state.lagRecoveries + 1 })),
+  setUseProxy: (useProxy) => set({ useProxy }),
+  toggleProxy: () => set((state) => ({ useProxy: !state.useProxy })),
 
   toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
   incrementReconnect: () => set((state) => ({ reconnectAttempts: state.reconnectAttempts + 1 })),
@@ -82,6 +88,7 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   reset: () => set((state) => ({
     ...initialState,
     antiLagEnabled: state.antiLagEnabled,
-    antiLagMode: state.antiLagMode
+    antiLagMode: state.antiLagMode,
+    useProxy: state.useProxy
   })),
 }));

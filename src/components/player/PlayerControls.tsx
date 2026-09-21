@@ -1,7 +1,7 @@
 import React, { useState, useRef } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  ArrowLeft, PictureInPicture2, Subtitles, ShieldCheck, Zap, RefreshCw, ChevronDown
+  ArrowLeft, PictureInPicture2, Subtitles, ShieldCheck, Zap, RefreshCw, ChevronDown, Globe
 } from 'lucide-react';
 import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
 
@@ -32,6 +32,8 @@ export default function PlayerControls({
     antiLagMode,
     bufferLength,
     lagRecoveries,
+    useProxy,
+    toggleProxy,
     setAntiLagEnabled,
     setAntiLagMode
   } = usePlayerStore();
@@ -124,7 +126,21 @@ export default function PlayerControls({
         </div>
 
         {/* Top Right Quick Badges */}
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2.5 shrink-0">
+          {/* Stream Proxy Toggle */}
+          <button
+            onClick={toggleProxy}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md ${
+              useProxy
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500/30 shadow-amber-500/10'
+                : 'bg-gray-800/80 text-gray-400 border border-gray-700 hover:bg-gray-700'
+            }`}
+            title="Toggles high-speed Cloud Proxy to bypass browser CORS / SSL blocks on HTTP streams"
+          >
+            <Globe className="w-3.5 h-3.5 text-amber-400" />
+            <span>Proxy: {useProxy ? 'ON' : 'OFF'}</span>
+          </button>
+
           {/* Anti-Lag Shield Toggle Button */}
           <div className="relative">
             <button

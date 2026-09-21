@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Hls from 'hls.js';
+import { Capacitor } from '@capacitor/core';
 import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
 
 export function useVideoPlayer(
@@ -19,6 +20,7 @@ export function useVideoPlayer(
     isMuted,
     antiLagEnabled,
     antiLagMode,
+    useProxy,
     setBufferLength,
     incrementLagRecovery
   } = usePlayerStore();
@@ -29,11 +31,16 @@ export function useVideoPlayer(
   const attemptsRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
+  const blobUrlRef = useRef<string | null>(null);
 
   const cleanup = useCallback(() => {
     if (retryTimeoutRef.current) {
       clearTimeout(retryTimeoutRef.current);
       retryTimeoutRef.current = null;
+    }
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
     }
     if (hlsRef.current) {
       hlsRef.current.destroy();
@@ -45,14 +52,12 @@ export function useVideoPlayer(
     }
   }, [videoRef]);
 
-  // Robust HLS config tuned for IPTV streams (handles PTS gaps, non-standard audio, and bandwidth drops)
+  // Robust HLS config tuned for IPTV streams
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
     const baseConfig = {
       enableWorker: true,
       capLevelToPlayerSize: true,
-      // Audio codec fallback for IPTV streams broadcasting AC3/MP2 audio
       defaultAudioCodec: 'mp4a.40.2',
-      // Tolerate timestamp gaps and segment duration drift
       maxBufferHole: 0.8,
       maxSeekHole: 2,
       nudgeOffset: 0.2,
@@ -175,12 +180,12 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
-    // Video error handler with smart recovery
+    // Video error handler with smart multi-layer recovery
     video.onerror = () => {
       const err = video.error;
-      console.warn('HTML5 Video Error code:', err?.code, err?.message);
+      console.warn('HTML5 Video Error:', err?.code, err?.message);
 
-      // If HLS is active, let HLS try to recover the media pipeline first
+      // If HLS is active, let HLS recover the media pipeline first
       if (hlsRef.current && mediaRecoveriesRef.current < 2) {
         mediaRecoveriesRef.current += 1;
         console.log(`[Anti-Lag] Recovering media error from video element (attempt ${mediaRecoveriesRef.current})...`);
@@ -188,7 +193,7 @@ export function useVideoPlayer(
         return;
       }
 
-      // If persistent format error on Live TV or VOD, try alternate format (e.g. TS instead of M3U8)
+      // If format fallback is available and hasn't been tried, automatically try it!
       if (onFormatFallback && attemptsRef.current === 0) {
         attemptsRef.current += 1;
         console.log('[OnyxStream] Format error encountered. Auto-trying alternate stream format...');
@@ -197,30 +202,47 @@ export function useVideoPlayer(
       }
 
       setError(
-        'Format Error: Stream format unsupported by current player. Use the "Switch Format" button above to try TS / alternate stream.'
+        'Format Error: Stream format unsupported by browser decoder. On Web, enable "Proxy Mode" or use "Auto-Fix Format" to switch TS / M3U8.'
       );
       setIsLoading(false);
     };
 
-    // Proxy routing for HTTPS -> HTTP
+    // URL resolution & CORS proxy handling
     let effectiveSrc = src;
-    if (
-      typeof window !== 'undefined' &&
-      window.location.protocol === 'https:' &&
-      src.startsWith('http://') &&
-      !window.location.hostname.includes('localhost')
-    ) {
-      effectiveSrc = `/proxy?url=${encodeURIComponent(src)}`;
+    const isNative = Capacitor.isNativePlatform();
+    const isHttpsWeb = typeof window !== 'undefined' && window.location.protocol === 'https:';
+    const isHttpStream = src.startsWith('http://');
+
+    // If running in browser over HTTPS with an HTTP IPTV stream, or if useProxy is enabled:
+    // Route through high-performance CORS proxy to prevent browser Mixed Content & CORS blocks!
+    if (useProxy || (!isNative && isHttpsWeb && isHttpStream)) {
+      effectiveSrc = `https://corsproxy.io/?url=${encodeURIComponent(src)}`;
     }
 
-    const isHlsUrl = effectiveSrc.includes('.m3u8') || (type === 'live' && !effectiveSrc.endsWith('.ts'));
+    const isHlsUrl =
+      effectiveSrc.includes('.m3u8') ||
+      type === 'live' ||
+      effectiveSrc.includes('/live/');
+
+    const isRawTs = effectiveSrc.endsWith('.ts') || effectiveSrc.includes('.ts?') || effectiveSrc.includes('/live/');
 
     if (isHlsUrl && Hls.isSupported()) {
       const hlsConfig = getHlsConfig(antiLagMode);
       const hls = new Hls(hlsConfig);
       hlsRef.current = hls;
 
-      hls.loadSource(effectiveSrc);
+      // If the stream is raw TS (MPEG-TS without HLS manifest), wrap it into a virtual HLS manifest
+      // so Hls.js's built-in WebWorker demuxer can convert the TS chunks into playable fMP4!
+      if (effectiveSrc.endsWith('.ts') || (type === 'live' && !effectiveSrc.includes('.m3u8'))) {
+        const virtualM3u8 = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:60.0,\n${effectiveSrc}\n`;
+        const blob = new Blob([virtualM3u8], { type: 'application/vnd.apple.mpegurl' });
+        const blobUrl = URL.createObjectURL(blob);
+        blobUrlRef.current = blobUrl;
+        hls.loadSource(blobUrl);
+      } else {
+        hls.loadSource(effectiveSrc);
+      }
+
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -286,7 +308,7 @@ export function useVideoPlayer(
       video.load();
       if (autoPlay) video.play().catch(console.warn);
     } else {
-      // Direct media playback (MP4, MKV, direct TS on supported platforms)
+      // Direct media playback (MP4, MKV, direct files)
       video.src = effectiveSrc;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
@@ -300,6 +322,7 @@ export function useVideoPlayer(
     isMuted,
     antiLagMode,
     antiLagEnabled,
+    useProxy,
     getHlsConfig,
     onFormatFallback,
     setIsLoading,

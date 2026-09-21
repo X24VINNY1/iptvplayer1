@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Globe } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 
 interface VideoPlayerProps {
@@ -35,7 +35,9 @@ export default function VideoPlayer({
     reset,
     setIsFullscreen,
     setVolume,
-    toggleMute
+    toggleMute,
+    useProxy,
+    toggleProxy
   } = usePlayerStore();
 
   useEffect(() => {
@@ -185,6 +187,17 @@ export default function VideoPlayer({
           <h2 className="text-2xl font-bold text-white mb-2">Playback Error</h2>
           <p className="text-gray-300 mb-6 max-w-md text-sm">{error}</p>
           <div className="flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => {
+                toggleProxy();
+                retry();
+              }}
+              className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-amber-600/30 active:scale-95"
+              title="Relays the stream through a high-speed HTTPS/CORS proxy to bypass browser security blocks"
+            >
+              <Globe className="w-4 h-4" />
+              {useProxy ? 'Proxy Active (Click to Disable)' : '⚡ Enable Cloud Proxy (Bypass SSL / CORS)'}
+            </button>
             {onFormatFallback && (
               <button
                 onClick={onFormatFallback}
