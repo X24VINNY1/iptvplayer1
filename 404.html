@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <script>
+    // GitHub Pages SPA redirect
+    var path = window.location.pathname;
+    var search = window.location.search;
+    var hash = window.location.hash;
+    if (path.includes('connect')) {
+      window.location.replace('/iptvplayer1/companion.html' + search + hash);
+    } else {
+      window.location.replace('/iptvplayer1/index.html' + search + hash);
+    }
+  </script>
+</head>
+<body></body>
+</html>

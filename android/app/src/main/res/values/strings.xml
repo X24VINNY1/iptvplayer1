@@ -1,7 +1,0 @@
-<?xml version='1.0' encoding='utf-8'?>
-<resources>
-    <string name="app_name">OnyxStream</string>
-    <string name="title_activity_main">OnyxStream</string>
-    <string name="package_name">com.onyxstream.app</string>
-    <string name="custom_url_scheme">com.onyxstream.app</string>
-</resources>
