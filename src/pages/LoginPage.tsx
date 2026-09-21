@@ -9,13 +9,31 @@ import AccountManager from '@/components/accounts/AccountManager';
 import SyncLoadingScreen from '@/components/ui/SyncLoadingScreen';
 import CompanionModal from '@/components/companion/CompanionModal';
 import { MonitorPlay, Smartphone } from 'lucide-react';
+import { useTVRemote } from '@/hooks/useTVRemote';
 
 const LoginPage: React.FC = () => {
+  // Activate global spatial navigation for Android TV remote D-pad
+  useTVRemote();
+
   const navigate = useNavigate();
   const { isAuthenticated, serverUrl, username, password, connectionType, m3uChannels } = useAuthStore();
   const { isLoaded, isSyncing, syncAll } = useContentStore();
   const [activeTab, setActiveTab] = useState<'xtream' | 'm3u'>('xtream');
   const [isCompanionOpen, setIsCompanionOpen] = useState(false);
+
+  // Automatically focus the primary input on mount or tab change so the remote is immediately ready
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      const primaryInput = document.querySelector<HTMLElement>(
+        'input[data-tv-focusable="true"], [data-tv-section="content"] input'
+      );
+      if (primaryInput) {
+        primaryInput.focus();
+        primaryInput.classList.add('tv-focused');
+      }
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [activeTab]);
 
   // Trigger library sync when authenticated
   useEffect(() => {
@@ -56,8 +74,11 @@ const LoginPage: React.FC = () => {
           <p className="text-gray-400 mt-2 text-center">Your premium IPTV experience</p>
         </div>
 
-        <div className="flex bg-gray-800/50 p-1 rounded-lg mb-6 border border-gray-700/50">
+        <div className="flex bg-gray-800/50 p-1 rounded-lg mb-6 border border-gray-700/50" data-tv-section="categories">
           <button
+            type="button"
+            data-tv-focusable="true"
+            tabIndex={0}
             onClick={() => setActiveTab('xtream')}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
               activeTab === 'xtream'
@@ -68,6 +89,9 @@ const LoginPage: React.FC = () => {
             Xtream Codes
           </button>
           <button
+            type="button"
+            data-tv-focusable="true"
+            tabIndex={0}
             onClick={() => setActiveTab('m3u')}
             className={`flex-1 py-2 text-sm font-medium rounded-md transition-all ${
               activeTab === 'm3u'
@@ -88,7 +112,10 @@ const LoginPage: React.FC = () => {
           <button
             type="button"
             onClick={() => setIsCompanionOpen(true)}
-            className="w-full py-2.5 px-4 bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 rounded-xl text-indigo-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md"
+            data-tv-focusable="true"
+            data-tv-section="content"
+            tabIndex={0}
+            className="w-full py-2.5 px-4 bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 rounded-xl text-indigo-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md focus:ring-4 focus:ring-indigo-500 outline-none"
           >
             <Smartphone className="w-4 h-4 text-indigo-400" />
             Connect from Phone (QR / 4-Digit PIN)

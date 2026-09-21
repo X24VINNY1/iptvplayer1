@@ -35,11 +35,14 @@ export default function AccountManager({ onConnect }: AccountManagerProps) {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between" data-tv-section="accounts">
         <h2 className="text-xl font-semibold text-white">Saved Accounts</h2>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+          data-tv-focusable="true"
+          data-tv-section="accounts"
+          tabIndex={0}
+          className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors focus:ring-4 focus:ring-indigo-500 outline-none"
         >
           <Plus className="w-4 h-4" />
           Add Account

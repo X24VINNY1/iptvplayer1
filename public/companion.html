@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#030712" />
+  <title>OnyxStream TV Companion Setup</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    }
+    body {
+      background-color: #030712;
+      color: #f3f4f6;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+      padding: 16px;
+    }
+    .card {
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid rgba(55, 65, 81, 0.7);
+      border-radius: 20px;
+      width: 100%;
+      max-width: 440px;
+      padding: 24px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+    }
+    .header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+    .logo-icon {
+      width: 44px;
+      height: 44px;
+      background: #4f46e5;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+    }
+    .logo-icon svg {
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: white;
+      stroke-width: 2;
+    }
+    .title h1 {
+      font-size: 19px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .title p {
+      font-size: 12px;
+      color: #9ca3af;
+      margin-top: 2px;
+    }
+    .pin-group {
+      background: #0b0f19;
+      border: 1px solid #1f2937;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 20px;
+    }
+    .pin-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: #818cf8;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 8px;
+    }
+    .pin-input {
+      width: 100%;
+      background: transparent;
+      border: none;
+      color: #fff;
+      font-size: 30px;
+      font-weight: 800;
+      letter-spacing: 0.25em;
+      text-align: center;
+      outline: none;
+      font-family: monospace;
+    }
+    .tabs {
+      display: flex;
+      background: #111827;
+      padding: 4px;
+      border-radius: 12px;
+      border: 1px solid #1f2937;
+      margin-bottom: 20px;
+      gap: 4px;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px;
+      background: transparent;
+      border: none;
+      border-radius: 8px;
+      color: #9ca3af;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .tab-btn.active {
+      background: #4f46e5;
+      color: #fff;
+      box-shadow: 0 4px 6px -1px rgba(79, 70, 229, 0.2);
+    }
+    .form-group {
+      margin-bottom: 16px;
+    }
+    .form-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: #d1d5db;
+      margin-bottom: 6px;
+    }
+    .input-field {
+      width: 100%;
+      background: #0b0f19;
+      border: 1px solid #374151;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #fff;
+      font-size: 14px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .input-field:focus {
+      border-color: #6366f1;
+      box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+    }
+    .submit-btn {
+      width: 100%;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 20px;
+      box-shadow: 0 10px 15px -3px rgba(79, 70, 229, 0.3);
+    }
+    .submit-btn:hover {
+      background: #4338ca;
+    }
+    .submit-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+    .alert {
+      padding: 14px;
+      border-radius: 12px;
+      margin-bottom: 16px;
+      font-size: 13px;
+      display: none;
+    }
+    .alert-success {
+      background: rgba(6, 78, 59, 0.8);
+      border: 1px solid #059669;
+      color: #6ee7b7;
+    }
+    .alert-error {
+      background: rgba(127, 29, 29, 0.8);
+      border: 1px solid #dc2626;
+      color: #fca5a5;
+    }
+    .file-drop {
+      border: 1px dashed #4b5563;
+      border-radius: 10px;
+      padding: 16px;
+      text-align: center;
+      cursor: pointer;
+      font-size: 12px;
+      color: #818cf8;
+      background: #0b0f19;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="header">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><rect x="2" y="7" width="20" height="15" rx="2" ry="2"></rect><polyline points="17 2 12 7 7 2"></polyline></svg>
+      </div>
+      <div class="title">
+        <h1>OnyxStream Companion</h1>
+        <p>Send credentials directly to your TV</p>
+      </div>
+    </div>
+
+    <div id="alertSuccess" class="alert alert-success">
+      <strong>Successfully Sent!</strong> Check your TV screen — it should now log in automatically.
+    </div>
+    <div id="alertError" class="alert alert-error"></div>
+
+    <form id="companionForm">
+      <div class="pin-group">
+        <div class="pin-label">
+          <span>TV 4-Digit PIN</span>
+          <span style="color:#9ca3af; font-size:10px;">Shown on TV</span>
+        </div>
+        <input type="text" id="pinInput" class="pin-input" maxlength="6" placeholder="0000" required autofocus />
+      </div>
+
+      <div class="tabs">
+        <button type="button" class="tab-btn active" id="tabXtream" onclick="switchTab('xtream')">Xtream Codes</button>
+        <button type="button" class="tab-btn" id="tabM3u" onclick="switchTab('m3u')">M3U Playlist</button>
+      </div>
+
+      <div id="xtreamSection">
+        <div class="form-group">
+          <label class="form-label">Server URL</label>
+          <input type="url" id="serverUrl" class="input-field" placeholder="http://example.com:8080" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Username</label>
+          <input type="text" id="username" class="input-field" placeholder="Username" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Password</label>
+          <input type="text" id="password" class="input-field" placeholder="Password" />
+        </div>
+      </div>
+
+      <div id="m3uSection" style="display:none;">
+        <div class="form-group">
+          <label class="form-label">M3U Playlist URL</label>
+          <input type="url" id="m3uUrl" class="input-field" placeholder="https://example.com/playlist.m3u" />
+        </div>
+        <div class="form-group">
+          <label class="form-label">Or Upload File</label>
+          <label class="file-drop">
+            <span id="fileLabel">Choose .m3u / .m3u8 file</span>
+            <input type="file" id="m3uFile" accept=".m3u,.m3u8" style="display:none;" onchange="handleFile(this)" />
+          </label>
+        </div>
+      </div>
+
+      <button type="submit" id="submitBtn" class="submit-btn">
+        <span>Send to TV</span>
+      </button>
+    </form>
+  </div>
+
+  <script>
+    let activeTab = 'xtream';
+    let m3uContent = '';
+
+    // Auto-fill PIN from URL params or hash
+    window.addEventListener('DOMContentLoaded', () => {
+      const urlParams = new URLSearchParams(window.location.search);
+      let pin = urlParams.get('pin');
+      if (!pin && window.location.hash) {
+        const match = window.location.hash.match(/pin=([0-9]{4,6})/);
+        if (match) pin = match[1];
+      }
+      if (!pin) {
+        const fullMatch = window.location.href.match(/pin=([0-9]{4,6})/);
+        if (fullMatch) pin = fullMatch[1];
+      }
+      if (pin) {
+        document.getElementById('pinInput').value = pin;
+      }
+    });
+
+    function switchTab(tab) {
+      activeTab = tab;
+      document.getElementById('tabXtream').className = tab === 'xtream' ? 'tab-btn active' : 'tab-btn';
+      document.getElementById('tabM3u').className = tab === 'm3u' ? 'tab-btn active' : 'tab-btn';
+      document.getElementById('xtreamSection').style.display = tab === 'xtream' ? 'block' : 'none';
+      document.getElementById('m3uSection').style.display = tab === 'm3u' ? 'block' : 'none';
+    }
+
+    function handleFile(input) {
+      const file = input.files[0];
+      if (!file) return;
+      document.getElementById('fileLabel').textContent = file.name;
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        m3uContent = e.target.result;
+      };
+      reader.readAsText(file);
+    }
+
+    document.getElementById('companionForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const pin = document.getElementById('pinInput').value.trim();
+      const alertSuccess = document.getElementById('alertSuccess');
+      const alertError = document.getElementById('alertError');
+      const submitBtn = document.getElementById('submitBtn');
+
+      alertSuccess.style.display = 'none';
+      alertError.style.display = 'none';
+
+      if (!pin || pin.length < 4) {
+        alertError.textContent = 'Please enter the 4-digit PIN shown on your TV.';
+        alertError.style.display = 'block';
+        return;
+      }
+
+      let payload = { type: activeTab };
+      if (activeTab === 'xtream') {
+        const serverUrl = document.getElementById('serverUrl').value.trim();
+        const username = document.getElementById('username').value.trim();
+        const password = document.getElementById('password').value.trim();
+
+        if (!serverUrl || !username || !password) {
+          alertError.textContent = 'Please enter Server URL, Username, and Password.';
+          alertError.style.display = 'block';
+          return;
+        }
+        payload = { type: 'xtream', serverUrl, username, password };
+      } else {
+        const m3uUrl = document.getElementById('m3uUrl').value.trim();
+        if (!m3uUrl && !m3uContent) {
+          alertError.textContent = 'Please provide an M3U URL or upload a playlist file.';
+          alertError.style.display = 'block';
+          return;
+        }
+        payload = { type: 'm3u', m3uUrl, m3uContent };
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sending to TV...';
+
+      let sent = false;
+
+      // 1. Send via ntfy.sh public pub/sub relay
+      try {
+        const topic = `onyxstream-${pin}`;
+        await fetch(`https://ntfy.sh/${topic}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+        sent = true;
+      } catch (err) {
+        console.warn('ntfy publish error:', err);
+      }
+
+      // 2. Also attempt local dev companion endpoint if available
+      try {
+        await fetch('/api/companion/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin, data: payload })
+        });
+        sent = true;
+      } catch (e) {}
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Send to TV';
+
+      if (sent) {
+        alertSuccess.style.display = 'block';
+      } else {
+        alertError.textContent = 'Could not deliver credentials to TV. Please check your PIN and internet connection.';
+        alertError.style.display = 'block';
+      }
+    });
+  </script>
+</body>
+</html>

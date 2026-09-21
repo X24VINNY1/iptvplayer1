@@ -68,15 +68,21 @@ export function useTVRemote(options: TVRemoteOptions = {}) {
 
       // Handle SELECT / ENTER / OK
       if (isSelect) {
-        if (isInput) return; // let text field handle enter naturally
-
-        e.preventDefault();
-        e.stopPropagation();
-
         if (onEnter) {
+          e.preventDefault();
+          e.stopPropagation();
           onEnter();
           return;
         }
+
+        // If target is an input and user presses OK on remote, trigger click to open on-screen keyboard
+        if (isInput) {
+          (target as HTMLElement).click();
+          return;
+        }
+
+        e.preventDefault();
+        e.stopPropagation();
 
         // Click the currently focused active element
         if (document.activeElement && document.activeElement !== document.body) {
@@ -87,7 +93,16 @@ export function useTVRemote(options: TVRemoteOptions = {}) {
 
       // Handle D-PAD ARROWS
       if (isUp || isDown || isLeft || isRight) {
-        if (isInput) return;
+        // If inside an input:
+        // ArrowUp and ArrowDown ALWAYS move focus between inputs and buttons!
+        // ArrowLeft and ArrowRight only move caret if there is text and caret isn't at boundary
+        if (isInput && (isLeft || isRight)) {
+          const inputEl = target as HTMLInputElement;
+          const valLen = inputEl.value ? inputEl.value.length : 0;
+          const pos = inputEl.selectionStart ?? 0;
+          if (isLeft && pos > 0) return; // let user move cursor left inside text
+          if (isRight && pos < valLen) return; // let user move cursor right inside text
+        }
 
         e.preventDefault();
         e.stopPropagation();

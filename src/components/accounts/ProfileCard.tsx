@@ -45,24 +45,33 @@ export default function ProfileCard({ profile, isActive, onConnect, onEdit, onDe
         <span>Added: {formatTime(profile.createdAt)}</span>
       </div>
 
-      <div className="flex items-center gap-2 mt-auto">
+      <div className="flex items-center gap-2 mt-auto" data-tv-section="accounts">
         <button
           onClick={onConnect}
-          className={`flex-1 py-2 rounded-lg font-medium transition-colors ${isActive ? 'bg-indigo-600/20 text-indigo-400 cursor-default' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
+          tabIndex={0}
+          data-tv-focusable="true"
+          data-tv-section="accounts"
+          className={`flex-1 py-2 rounded-lg font-medium transition-colors focus:ring-4 focus:ring-indigo-500 outline-none ${isActive ? 'bg-indigo-600/20 text-indigo-400 cursor-default' : 'bg-indigo-600 hover:bg-indigo-700 text-white'}`}
           disabled={isActive}
         >
           {isActive ? 'Connected' : 'Connect'}
         </button>
         <button
           onClick={onEdit}
-          className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors"
+          tabIndex={0}
+          data-tv-focusable="true"
+          data-tv-section="accounts"
+          className="p-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-lg transition-colors focus:ring-2 focus:ring-indigo-500 outline-none"
           title="Edit"
         >
           <Pencil className="w-4 h-4" />
         </button>
         <button
           onClick={onDelete}
-          className="p-2 bg-gray-800 hover:bg-red-500/20 hover:text-red-400 text-gray-300 rounded-lg transition-colors"
+          tabIndex={0}
+          data-tv-focusable="true"
+          data-tv-section="accounts"
+          className="p-2 bg-gray-800 hover:bg-red-500/20 hover:text-red-400 text-gray-300 rounded-lg transition-colors focus:ring-2 focus:ring-indigo-500 outline-none"
           title="Delete"
         >
           <Trash2 className="w-4 h-4" />

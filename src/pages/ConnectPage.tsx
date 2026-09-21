@@ -73,20 +73,26 @@ export default function ConnectPage() {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch('/api/companion/submit', {
+      // 1. Send via ntfy.sh cloud relay
+      const topic = `onyxstream-${cleanPin}`;
+      await fetch(`https://ntfy.sh/${topic}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pin: cleanPin, data: payload }),
+        body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
-      if (!res.ok) {
-        throw new Error(json.error || 'Failed to transfer to TV');
-      }
+      // 2. Also try local companion endpoint if available
+      try {
+        await fetch('/api/companion/submit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin: cleanPin, data: payload }),
+        });
+      } catch {}
 
       setSuccessMessage('Successfully sent to your TV! Check your TV screen — it should now log in automatically.');
     } catch (err: any) {
-      setErrorMessage(err.message || 'Connection failed. Make sure your phone is on the same Wi-Fi as your TV.');
+      setErrorMessage(err.message || 'Connection failed. Please check your PIN and internet connection.');
     } finally {
       setIsSubmitting(false);
     }
