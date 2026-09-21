@@ -7,10 +7,13 @@ import CategoryManagerModal from '@/components/ui/CategoryManagerModal';
 import { formatDate } from '@/utils/format';
 import { Server, User, Clock, Activity, Shield, Tv, Info, Globe, SlidersHorizontal, Sparkles, Film, Radio } from 'lucide-react';
 
+import { useSettingsStore, VideoPlayerEngine } from '@/store/useSettingsStore';
+
 const SettingsPage: React.FC = () => {
   const { userInfo, serverInfo, connectionType, serverUrl, username } = useAuthStore();
   const { liveCategories, vodCategories, seriesCategories } = useContentStore();
   const { filterUsOnly, showAll } = useCategoryStore();
+  const { preferredPlayer, setPreferredPlayer } = useSettingsStore();
 
   const [activeModalType, setActiveModalType] = useState<'live' | 'vod' | 'series' | null>(null);
 
@@ -45,6 +48,146 @@ const SettingsPage: React.FC = () => {
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-12 pb-24 h-[calc(100vh-64px)] overflow-y-auto scrollbar-hide">
       
+      {/* Video Player Engine Section */}
+      <section>
+        <div className="mb-6 border-b border-gray-800 pb-4">
+          <h2 className="text-2xl font-bold text-white flex items-center">
+            <Tv className="w-6 h-6 mr-2 text-indigo-500" />
+            Preferred Video Player Engine
+          </h2>
+          <p className="text-gray-400 mt-1 text-sm">
+            Choose which player engine opens when you click any Live TV channel, movie, or TV show.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {/* Native Player (ExoPlayer) */}
+          <div 
+            onClick={() => setPreferredPlayer('native')}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              preferredPlayer === 'native'
+                ? 'bg-indigo-600/20 border-indigo-500 shadow-lg shadow-indigo-500/20 ring-1 ring-indigo-500'
+                : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-indigo-600/30 flex items-center justify-center text-indigo-400 font-bold text-lg">
+                🚀
+              </div>
+              {preferredPlayer === 'native' && (
+                <span className="bg-indigo-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <h3 className="text-white font-semibold text-base mb-1">Native Android Player</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Internal hardware-accelerated player engine. Perfect for TV remotes with zero lag.
+            </p>
+          </div>
+
+          {/* VLC Player */}
+          <div 
+            onClick={() => setPreferredPlayer('vlc')}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              preferredPlayer === 'vlc'
+                ? 'bg-orange-600/20 border-orange-500 shadow-lg shadow-orange-500/20 ring-1 ring-orange-500'
+                : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-orange-600/30 flex items-center justify-center text-orange-400 font-bold text-lg">
+                🟧
+              </div>
+              {preferredPlayer === 'vlc' && (
+                <span className="bg-orange-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <h3 className="text-white font-semibold text-base mb-1">VLC Player (External)</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Launches VLC for Android with full codec support, AC3/EAC3 audio, and hardware decoding.
+            </p>
+          </div>
+
+          {/* MX Player */}
+          <div 
+            onClick={() => setPreferredPlayer('mx')}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              preferredPlayer === 'mx'
+                ? 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-500/20 ring-1 ring-blue-500'
+                : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-blue-600/30 flex items-center justify-center text-blue-400 font-bold text-lg">
+                🟦
+              </div>
+              {preferredPlayer === 'mx' && (
+                <span className="bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <h3 className="text-white font-semibold text-base mb-1">MX Player (HW+)</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Launches MX Player with HW+ decoder enabled for high-bitrate 4K and HEVC streams.
+            </p>
+          </div>
+
+          {/* Built-in Web Player */}
+          <div 
+            onClick={() => setPreferredPlayer('builtin')}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              preferredPlayer === 'builtin'
+                ? 'bg-emerald-600/20 border-emerald-500 shadow-lg shadow-emerald-500/20 ring-1 ring-emerald-500'
+                : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-emerald-600/30 flex items-center justify-center text-emerald-400 font-bold text-lg">
+                🛡️
+              </div>
+              {preferredPlayer === 'builtin' && (
+                <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <h3 className="text-white font-semibold text-base mb-1">Onyx Web Player</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              In-app web player featuring the built-in Anti-Lag Engine and adaptive buffering.
+            </p>
+          </div>
+
+          {/* System Chooser */}
+          <div 
+            onClick={() => setPreferredPlayer('chooser')}
+            className={`p-5 rounded-2xl border cursor-pointer transition-all ${
+              preferredPlayer === 'chooser'
+                ? 'bg-purple-600/20 border-purple-500 shadow-lg shadow-purple-500/20 ring-1 ring-purple-500'
+                : 'bg-gray-900/60 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-3">
+              <div className="w-10 h-10 rounded-xl bg-purple-600/30 flex items-center justify-center text-purple-400 font-bold text-lg">
+                🌐
+              </div>
+              {preferredPlayer === 'chooser' && (
+                <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <h3 className="text-white font-semibold text-base mb-1">System Chooser</h3>
+            <p className="text-xs text-gray-400 leading-relaxed">
+              Prompts Android TV app chooser every time so you can pick any installed video player.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* Category Management Section */}
       <section>
         <div className="mb-6 border-b border-gray-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

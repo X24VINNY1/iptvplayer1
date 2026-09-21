@@ -7,6 +7,7 @@ import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import { buildStreamUrl } from '@/utils/url';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
 
 const PlayerPage: React.FC = () => {
   const { type, streamId } = useParams<{ type: 'live' | 'vod' | 'series'; streamId: string }>();
@@ -144,14 +145,43 @@ const PlayerPage: React.FC = () => {
         onFormatFallback={toggleStreamFormat}
       />
 
-      {/* Stream format switcher pill for troubleshooting tricky IPTV feeds */}
-      <button
-        onClick={toggleStreamFormat}
-        className="absolute top-4 right-20 z-40 bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
-        title="Switch stream format (MP4, HLS/M3U8, or MKV/TS)"
-      >
-        Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
-      </button>
+      {/* Top Right Quick Launchers & Format Switcher */}
+      <div className="absolute top-4 right-16 z-40 flex items-center gap-2">
+        <button
+          onClick={() => openInNativePlayer(streamUrl, title, type === 'live')}
+          className="bg-indigo-600/90 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-indigo-500/40"
+          title="Open in Internal Native Hardware Player (ExoPlayer)"
+        >
+          <span>🚀</span>
+          <span>Native</span>
+        </button>
+
+        <button
+          onClick={() => openInVlc(streamUrl, title)}
+          className="bg-orange-600/90 hover:bg-orange-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-orange-500/40"
+          title="Open in VLC Player"
+        >
+          <span>🟧</span>
+          <span>VLC</span>
+        </button>
+
+        <button
+          onClick={() => openInMxPlayer(streamUrl, title)}
+          className="bg-blue-600/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-blue-500/40"
+          title="Open in MX Player"
+        >
+          <span>🟦</span>
+          <span>MX</span>
+        </button>
+
+        <button
+          onClick={toggleStreamFormat}
+          className="bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
+          title="Switch stream format (MP4, HLS/M3U8, or MKV/TS)"
+        >
+          Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
+        </button>
+      </div>
     </div>
   );
 };

@@ -1,8 +1,9 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Globe, Play, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Globe, Play, ArrowLeft, Tv } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
+import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
 
 interface VideoPlayerProps {
   src: string;
@@ -228,37 +229,52 @@ export default function VideoPlayer({
           <h2 className="text-2xl font-bold text-white mb-2">Playback Error</h2>
           <p className="text-gray-300 mb-6 max-w-md text-sm">{error}</p>
           <div className="flex flex-wrap items-center justify-center gap-3">
+            {/* Native & External Player fallbacks directly on error */}
             <button
-              onClick={() => {
-                toggleProxy();
-                retry();
-              }}
-              className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-amber-600/30 active:scale-95"
-              title="Relays HLS streams through high-speed HTTPS/CORS proxy to bypass browser SSL blocks"
+              onClick={() => openInNativePlayer(src, title || 'OnyxStream', type === 'live')}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+              title="Launch in Android Hardware-Accelerated Native Player"
             >
-              <Globe className="w-4 h-4" />
-              {useProxy ? 'Proxy Active (Click to Disable)' : '⚡ Enable Cloud Proxy (Bypass SSL / CORS)'}
+              <Tv className="w-4 h-4" />
+              Play in Native Player
             </button>
+            <button
+              onClick={() => openInVlc(src, title || 'OnyxStream')}
+              className="bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-orange-600/30 active:scale-95"
+              title="Open stream in VLC Player app"
+            >
+              <span>🟧</span>
+              Play in VLC
+            </button>
+            <button
+              onClick={() => openInMxPlayer(src, title || 'OnyxStream')}
+              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
+              title="Open stream in MX Player"
+            >
+              <span>🟦</span>
+              Play in MX Player
+            </button>
+
             {onFormatFallback && (
               <button
                 onClick={onFormatFallback}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
               >
                 <RefreshCw className="w-4 h-4" />
-                Auto-Fix Format (Switch MP4 / M3U8)
+                Auto-Fix Format
               </button>
             )}
             <button
               onClick={retry}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+              className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg active:scale-95"
             >
               <RefreshCw className="w-4 h-4" />
-              Retry Playback
+              Retry
             </button>
             {onBack && (
               <button
                 onClick={onBack}
-                className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-6 py-2.5 rounded-xl font-medium transition-colors"
+                className="bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white px-5 py-2.5 rounded-xl font-medium transition-colors"
               >
                 Go Back
               </button>
@@ -275,6 +291,7 @@ export default function VideoPlayer({
       >
         <PlayerControls
           videoRef={videoRef}
+          src={src}
           isLive={type === 'live'}
           title={title}
           onBack={onBack}

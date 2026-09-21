@@ -1,12 +1,14 @@
 import React, { useState, useRef } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  ArrowLeft, PictureInPicture2, Subtitles, ShieldCheck, Zap, RefreshCw, ChevronDown, Globe
+  ArrowLeft, PictureInPicture2, Subtitles, ShieldCheck, Zap, RefreshCw, ChevronDown, Globe, Tv, ExternalLink
 } from 'lucide-react';
 import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
+import { openInVlc, openInMxPlayer, openInNativePlayer, openInSystemChooser } from '@/utils/nativePlayer';
 
 interface PlayerControlsProps {
   videoRef: React.RefObject<HTMLVideoElement>;
+  src?: string;
   isLive?: boolean;
   title?: string;
   onBack?: () => void;
@@ -15,6 +17,7 @@ interface PlayerControlsProps {
 
 export default function PlayerControls({
   videoRef,
+  src,
   isLive,
   title,
   onBack,
@@ -126,7 +129,59 @@ export default function PlayerControls({
         </div>
 
         {/* Top Right Quick Badges */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="flex items-center gap-2 shrink-0">
+          {/* Native & External Player Launchers */}
+          {src && (
+            <div className="flex items-center gap-1 bg-black/60 p-0.5 rounded-full border border-white/10 backdrop-blur-md">
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.pause();
+                  openInNativePlayer(src, title || 'OnyxStream', isLive);
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-indigo-300 hover:text-white bg-indigo-600/30 hover:bg-indigo-600/60 transition-colors active:scale-95"
+                title="Open in Internal Native Hardware Player (ExoPlayer)"
+              >
+                <Tv className="w-3.5 h-3.5 text-indigo-400" />
+                <span>Native Player</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.pause();
+                  openInVlc(src, title || 'OnyxStream');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-orange-300 hover:text-white bg-orange-600/30 hover:bg-orange-600/60 transition-colors active:scale-95"
+                title="Open in VLC Player (Android TV / PC)"
+              >
+                <span>🟧</span>
+                <span>VLC</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.pause();
+                  openInMxPlayer(src, title || 'OnyxStream');
+                }}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold text-blue-300 hover:text-white bg-blue-600/30 hover:bg-blue-600/60 transition-colors active:scale-95"
+                title="Open in MX Player"
+              >
+                <span>🟦</span>
+                <span>MX</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  if (videoRef.current) videoRef.current.pause();
+                  openInSystemChooser(src, title || 'OnyxStream');
+                }}
+                className="p-1.5 rounded-full text-xs font-semibold text-gray-300 hover:text-white bg-gray-800 hover:bg-gray-700 transition-colors"
+                title="Open in other external player (Just Player, Kodi, etc.)"
+              >
+                <ExternalLink className="w-3.5 h-3.5 text-gray-400" />
+              </button>
+            </div>
+          )}
+
           {/* Stream Proxy Toggle */}
           <button
             onClick={toggleProxy}
