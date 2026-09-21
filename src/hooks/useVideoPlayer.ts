@@ -1,14 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Hls from 'hls.js';
-import { Capacitor } from '@capacitor/core';
 import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
 
 export function useVideoPlayer(
   videoRef: React.RefObject<HTMLVideoElement>,
   src: string | null,
   type: 'live' | 'vod' | 'series' = 'vod',
-  autoPlay: boolean = true,
-  onFormatFallback?: () => void
+  autoPlay: boolean = true
 ) {
   const {
     setIsPlaying,
@@ -26,30 +24,32 @@ export function useVideoPlayer(
   } = usePlayerStore();
 
   const hlsRef = useRef<Hls | null>(null);
-  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecoveriesRef = useRef<number>(0);
-  const fallbackCountRef = useRef<number>(0);
   const networkErrorRetriesRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
   const blobUrlRef = useRef<string | null>(null);
 
   const cleanup = useCallback(() => {
-    if (retryTimeoutRef.current) {
-      clearTimeout(retryTimeoutRef.current);
-      retryTimeoutRef.current = null;
-    }
     if (blobUrlRef.current) {
       URL.revokeObjectURL(blobUrlRef.current);
       blobUrlRef.current = null;
     }
     if (hlsRef.current) {
-      hlsRef.current.destroy();
+      try {
+        hlsRef.current.destroy();
+      } catch (e) {
+        console.warn('Error destroying HLS:', e);
+      }
       hlsRef.current = null;
     }
     if (videoRef.current) {
       videoRef.current.removeAttribute('src');
-      videoRef.current.load();
+      try {
+        videoRef.current.load();
+      } catch (e) {
+        console.warn('Error loading video after cleanup:', e);
+      }
     }
   }, [videoRef]);
 
@@ -64,9 +64,9 @@ export function useVideoPlayer(
       nudgeOffset: 0.2,
       nudgeMaxRetry: 8,
       maxFragLookUpTolerance: 0.3,
-      fragLoadingTimeOut: 25000,
-      manifestLoadingTimeOut: 25000,
-      levelLoadingTimeOut: 25000,
+      fragLoadingTimeOut: 20000,
+      manifestLoadingTimeOut: 20000,
+      levelLoadingTimeOut: 20000,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
       }
@@ -147,10 +147,9 @@ export function useVideoPlayer(
 
     video.oncanplay = () => {
       setIsLoading(false);
-      fallbackCountRef.current = 0;
       if (autoPlay) {
         video.play().catch((e) => {
-          console.warn('Autoplay prevented:', e.message);
+          console.warn('[OnyxStream] Autoplay waiting for user gesture:', e.message);
         });
       }
     };
@@ -183,35 +182,31 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
-    // Video error handler with smart multi-layer recovery
+    // Video element error handler
     video.onerror = () => {
       const err = video.error;
-      console.warn('HTML5 Video Error:', err?.code, err?.message);
+      console.warn('[OnyxStream] Video error:', err?.code, err?.message);
 
-      // If HLS is active, let HLS recover the media pipeline first
+      // If HLS is active, let HLS try to recover the media pipeline first
       if (hlsRef.current && mediaRecoveriesRef.current < 2) {
         mediaRecoveriesRef.current += 1;
-        console.log(`[Anti-Lag] Recovering media error from video element (attempt ${mediaRecoveriesRef.current})...`);
+        console.log(`[Anti-Lag] Recovering media error (attempt ${mediaRecoveriesRef.current})...`);
         hlsRef.current.recoverMediaError();
         return;
       }
 
-      // If format fallback is available and hasn't exceeded 2 tries, automatically try it!
-      if (onFormatFallback && fallbackCountRef.current < 2) {
-        fallbackCountRef.current += 1;
-        console.log(`[OnyxStream] Format error encountered. Auto-trying alternate stream format (attempt ${fallbackCountRef.current})...`);
-        onFormatFallback();
-        return;
+      let errorMsg = 'Playback Error: Stream format unsupported by browser decoder. Launch in VLC, MX Player, or Native Player.';
+      if (err?.code === 2) {
+        errorMsg = 'Network Error: Stream server dropped connection or is unreachable.';
+      } else if (err?.code === 4) {
+        errorMsg = 'Decoder Error: Audio/Video codec not supported by browser. Launch in VLC or Native Player.';
       }
 
-      setError(
-        'Format Error: Stream format unsupported by browser decoder. Use "Auto-Fix Format" to toggle MP4 / M3U8, or enable Cloud Proxy.'
-      );
+      setError(errorMsg);
       setIsLoading(false);
     };
 
-    // Source resolution: Play directly from server by default.
-    // If the user explicitly activates Cloud Proxy for testing on Web, route through cors.eu.org
+    // Source resolution
     let effectiveSrc = src;
     const isHlsUrl =
       src.includes('.m3u8') ||
@@ -221,15 +216,12 @@ export function useVideoPlayer(
       effectiveSrc = `https://cors.eu.org/${src}`;
     }
 
-    const isRawTs = effectiveSrc.endsWith('.ts') || effectiveSrc.includes('.ts?') || effectiveSrc.includes('/live/');
-
     if (isHlsUrl && Hls.isSupported()) {
       const hlsConfig = getHlsConfig(antiLagMode);
       const hls = new Hls(hlsConfig);
       hlsRef.current = hls;
 
-      // If the stream is raw TS (MPEG-TS without HLS manifest), wrap it into a virtual HLS manifest
-      // so Hls.js's built-in WebWorker demuxer can convert the TS chunks into playable fMP4!
+      // Handle raw TS stream on HLS engine
       if (effectiveSrc.endsWith('.ts') || (type === 'live' && !effectiveSrc.includes('.m3u8'))) {
         const virtualM3u8 = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:60.0,\n${effectiveSrc}\n`;
         const blob = new Blob([virtualM3u8], { type: 'application/vnd.apple.mpegurl' });
@@ -244,16 +236,15 @@ export function useVideoPlayer(
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setIsLoading(false);
-        fallbackCountRef.current = 0;
         networkErrorRetriesRef.current = 0;
         if (autoPlay) {
           video.play().catch((err) => {
-            console.warn('Autoplay prevented:', err.message);
+            console.warn('[OnyxStream] Autoplay prevented:', err.message);
           });
         }
       });
 
-      hls.on(Hls.Events.ERROR, (event, data) => {
+      hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
           if (antiLagEnabled) {
             incrementLagRecovery();
@@ -266,25 +257,19 @@ export function useVideoPlayer(
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
               networkErrorRetriesRef.current += 1;
-              if (networkErrorRetriesRef.current <= 3) {
-                console.log(`[Anti-Lag] Network error, restarting HLS loader (attempt ${networkErrorRetriesRef.current}/3)...`);
+              if (networkErrorRetriesRef.current <= 2) {
+                console.log(`[Anti-Lag] Network error, restarting HLS loader (${networkErrorRetriesRef.current}/2)...`);
                 hls.startLoad();
               } else {
-                console.warn('[Anti-Lag] Network error: max retries reached.');
-                if (onFormatFallback && fallbackCountRef.current < 2) {
-                  fallbackCountRef.current += 1;
-                  onFormatFallback();
-                } else {
-                  setError('Stream connection error: Server did not respond. Check your stream URL or server status.');
-                  setIsLoading(false);
-                }
+                setError('Network Error: Stream server is not responding. Try VLC, MX Player, or Native Player.');
+                setIsLoading(false);
               }
               break;
 
             case Hls.ErrorTypes.MEDIA_ERROR:
               if (mediaRecoveriesRef.current < 2) {
                 mediaRecoveriesRef.current += 1;
-                console.log(`[Anti-Lag] Recovering media error (attempt ${mediaRecoveriesRef.current})...`);
+                console.log(`[Anti-Lag] Recovering media error (${mediaRecoveriesRef.current})...`);
                 hls.recoverMediaError();
               } else if (mediaRecoveriesRef.current === 2) {
                 mediaRecoveriesRef.current += 1;
@@ -292,26 +277,15 @@ export function useVideoPlayer(
                 hls.swapAudioCodec();
                 hls.recoverMediaError();
               } else {
-                console.warn('[Anti-Lag] Fatal media error unrecoverable. Attempting fallback...');
-                if (onFormatFallback && fallbackCountRef.current < 2) {
-                  fallbackCountRef.current += 1;
-                  onFormatFallback();
-                } else {
-                  setError('Media format error: Decoder encountered unsupported stream codec.');
-                  setIsLoading(false);
-                }
+                setError('Codec Error: Decoder encountered unsupported stream format. Open in VLC or Native Player.');
+                setIsLoading(false);
               }
               break;
 
             default:
               console.warn('[Anti-Lag] Fatal HLS error:', data.details);
-              if (onFormatFallback && fallbackCountRef.current < 2) {
-                fallbackCountRef.current += 1;
-                onFormatFallback();
-              } else {
-                setError(`Playback Error: ${data.details}`);
-                setIsLoading(false);
-              }
+              setError(`Playback Error: ${data.details}. Open in VLC or Native Player.`);
+              setIsLoading(false);
               break;
           }
         }
@@ -338,7 +312,6 @@ export function useVideoPlayer(
     antiLagEnabled,
     useProxy,
     getHlsConfig,
-    onFormatFallback,
     setIsLoading,
     setError,
     setIsPlaying,
@@ -361,8 +334,8 @@ export function useVideoPlayer(
       if (video.currentTime === lastTimeRef.current) {
         stallCounterRef.current += 1;
 
-        if (stallCounterRef.current >= 3) {
-          console.warn('[Anti-Lag Watchdog] Freeze detected! Skipping bad packet...');
+        if (stallCounterRef.current >= 4) {
+          console.warn('[Anti-Lag Watchdog] Freeze detected, nudging stream...');
           incrementLagRecovery();
 
           if (video.buffered && video.buffered.length > 0) {
@@ -405,12 +378,10 @@ export function useVideoPlayer(
   }, [initPlayer, cleanup]);
 
   const flushAndResync = () => {
-    fallbackCountRef.current = 0;
     initPlayer();
   };
 
   const retry = () => {
-    fallbackCountRef.current = 0;
     initPlayer();
   };
 

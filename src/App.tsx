@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import AppLayout from '@/components/layout/AppLayout';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 
 // Pages
 import LoginPage from '@/pages/LoginPage';
@@ -18,34 +19,36 @@ const App = () => {
   const { isAuthenticated } = useAuthStore();
 
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route 
-          path="/login" 
-          element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} 
-        />
-        
-        {/* Protected Routes */}
-        <Route element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}>
-          <Route path="/" element={<DashboardPage />} />
-          <Route path="/live" element={<LiveTVPage />} />
-          <Route path="/movies" element={<MoviesPage />} />
-          <Route path="/series" element={<SeriesPage />} />
-          <Route path="/series/:seriesId" element={<SeriesDetailPage />} />
-          <Route path="/favorites" element={<FavoritesPage />} />
-          <Route path="/search" element={<SearchPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Route>
+    <ErrorBoundary>
+      <BrowserRouter>
+        <Routes>
+          <Route 
+            path="/login" 
+            element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} 
+          />
+          
+          {/* Protected Routes */}
+          <Route element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}>
+            <Route path="/" element={<DashboardPage />} />
+            <Route path="/live" element={<LiveTVPage />} />
+            <Route path="/movies" element={<MoviesPage />} />
+            <Route path="/series" element={<SeriesPage />} />
+            <Route path="/series/:seriesId" element={<SeriesDetailPage />} />
+            <Route path="/favorites" element={<FavoritesPage />} />
+            <Route path="/search" element={<SearchPage />} />
+            <Route path="/settings" element={<SettingsPage />} />
+          </Route>
 
-        {/* Fullscreen Video Player Route - completely decoupled from sidebar/header layout */}
-        <Route 
-          path="/player/:type/:streamId" 
-          element={isAuthenticated ? <PlayerPage /> : <Navigate to="/login" replace />} 
-        />
+          {/* Fullscreen Video Player Route */}
+          <Route 
+            path="/player/:type/:streamId" 
+            element={isAuthenticated ? <PlayerPage /> : <Navigate to="/login" replace />} 
+          />
 
-        <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
-      </Routes>
-    </BrowserRouter>
+          <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
+        </Routes>
+      </BrowserRouter>
+    </ErrorBoundary>
   );
 };
 

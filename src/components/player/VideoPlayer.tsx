@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Globe, Play, ArrowLeft, Tv } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, Tv, Globe } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
 
@@ -27,8 +27,8 @@ export default function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Hook up video player engine & events with Anti-Lag and auto-format fallback
-  const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay, onFormatFallback);
+  // Hook up video player engine & events
+  const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay);
 
   const {
     isPlaying,
@@ -45,26 +45,20 @@ export default function VideoPlayer({
   useEffect(() => {
     reset();
     return () => reset();
-  }, [src, reset]);
+  }, [src]);
 
-  const handleMouseMove = () => {
+  const handleUserActivity = () => {
     setShowControls(true);
     if (hideControlsTimeout.current) {
       clearTimeout(hideControlsTimeout.current);
     }
-    // Only schedule fade-out if the video is actually playing and not stalled/paused
-    if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
+    // Only auto-hide if playing smoothly without loading or error
+    if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading && !error) {
       hideControlsTimeout.current = setTimeout(() => {
-        if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
+        if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading && !error) {
           setShowControls(false);
         }
-      }, 4000);
-    }
-  };
-
-  const handleMouseLeave = () => {
-    if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
-      setShowControls(false);
+      }, 4500);
     }
   };
 
@@ -76,13 +70,16 @@ export default function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [setIsFullscreen]);
 
+  // Keyboard & D-Pad navigation for Android TV remotes
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      handleUserActivity();
       if (!videoRef.current) return;
 
       switch (e.key) {
         case ' ':
         case 'Enter':
+        case 'Select':
           e.preventDefault();
           if (videoRef.current.paused) {
             videoRef.current.play().catch(console.warn);
@@ -132,6 +129,7 @@ export default function VideoPlayer({
           }
           break;
         case 'Escape':
+        case 'Back':
           if (document.fullscreenElement) {
             document.exitFullscreen();
           } else if (onBack) {
@@ -139,12 +137,11 @@ export default function VideoPlayer({
           }
           break;
       }
-      handleMouseMove();
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMute, setVolume, type, onBack]);
+  }, [toggleMute, setVolume, type, onBack, isPlaying, isLoading, error]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -158,15 +155,20 @@ export default function VideoPlayer({
     <div
       ref={containerRef}
       className="w-full h-full bg-black relative group overflow-hidden flex flex-col select-none"
-      onMouseMove={handleMouseMove}
-      onMouseLeave={handleMouseLeave}
-      onTouchStart={handleMouseMove}
+      onMouseMove={handleUserActivity}
+      onMouseLeave={() => {
+        if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading && !error) {
+          setShowControls(false);
+        }
+      }}
+      onTouchStart={handleUserActivity}
+      onClick={handleUserActivity}
       onDoubleClick={toggleFullscreen}
     >
-      {/* Video Element - no crossOrigin to allow unheadered IPTV streams */}
+      {/* Video Element */}
       <video
         ref={videoRef}
-        className="w-full h-full object-contain cursor-pointer"
+        className="w-full h-full object-contain cursor-pointer bg-black"
         playsInline
         preload="auto"
         onClick={() => {
@@ -177,23 +179,21 @@ export default function VideoPlayer({
         }}
       />
 
-      {/* Persistent Emergency Back Button - always accessible even if controls fade */}
-      {onBack && (
+      {/* Emergency Always-Visible Back Button if controls hide */}
+      {onBack && !showControls && (
         <button
           onClick={(e) => {
             e.stopPropagation();
             onBack();
           }}
-          className={`absolute top-4 left-4 z-50 p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white/80 hover:text-white backdrop-blur-md transition-all border border-white/10 shadow-lg ${
-            showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
-          }`}
+          className="absolute top-4 left-4 z-50 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white/90 hover:text-white backdrop-blur-md transition-all border border-white/10 shadow-lg opacity-80 hover:opacity-100"
           title="Go Back"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
       )}
 
-      {/* Click to Play Overlay (fixes browser autoplay blocking & gives clear visual feedback) */}
+      {/* Click to Play Overlay (fixes autoplay blocks and clarifies ready state) */}
       {!isLoading && !error && (!isPlaying || (videoRef.current && videoRef.current.paused)) && (
         <div 
           onClick={(e) => {
@@ -222,59 +222,78 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Error Overlay */}
+      {/* Error Overlay with Native Player / VLC / MX Player 1-Click Launchers */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-20 p-6 text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mb-4 animate-bounce" />
-          <h2 className="text-2xl font-bold text-white mb-2">Playback Error</h2>
-          <p className="text-gray-300 mb-6 max-w-md text-sm">{error}</p>
-          <div className="flex flex-wrap items-center justify-center gap-3">
-            {/* Native & External Player fallbacks directly on error */}
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/95 z-40 p-6 text-center">
+          <AlertCircle className="w-16 h-16 text-amber-500 mb-4 animate-bounce" />
+          <h2 className="text-2xl font-bold text-white mb-2">Playback Notice</h2>
+          <p className="text-gray-300 mb-6 max-w-lg text-sm leading-relaxed">{error}</p>
+          
+          <div className="flex flex-wrap items-center justify-center gap-3 max-w-xl">
+            {/* Native Hardware Player */}
             <button
               onClick={() => openInNativePlayer(src, title || 'OnyxStream', type === 'live')}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
-              title="Launch in Android Hardware-Accelerated Native Player"
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
             >
               <Tv className="w-4 h-4" />
               Play in Native Player
             </button>
+
+            {/* VLC Player */}
             <button
               onClick={() => openInVlc(src, title || 'OnyxStream')}
-              className="bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-orange-600/30 active:scale-95"
-              title="Open stream in VLC Player app"
+              className="bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-orange-600/30 active:scale-95"
             >
               <span>🟧</span>
               Play in VLC
             </button>
+
+            {/* MX Player */}
             <button
               onClick={() => openInMxPlayer(src, title || 'OnyxStream')}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
-              title="Open stream in MX Player"
+              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
             >
               <span>🟦</span>
               Play in MX Player
             </button>
 
+            {/* Auto-Fix Format Switcher */}
             {onFormatFallback && (
               <button
                 onClick={onFormatFallback}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
+                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
               >
                 <RefreshCw className="w-4 h-4" />
-                Auto-Fix Format
+                Switch Format (MP4 / M3U8)
               </button>
             )}
+
+            {/* Toggle Cloud Proxy */}
+            <button
+              onClick={() => {
+                toggleProxy();
+                retry();
+              }}
+              className="bg-gray-800 hover:bg-gray-700 text-amber-400 px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
+            >
+              <Globe className="w-4 h-4" />
+              {useProxy ? 'Turn Off Proxy' : 'Enable Cloud Proxy'}
+            </button>
+
+            {/* Retry */}
             <button
               onClick={retry}
-              className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg active:scale-95"
+              className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
             >
               <RefreshCw className="w-4 h-4" />
               Retry
             </button>
+
+            {/* Go Back */}
             {onBack && (
               <button
                 onClick={onBack}
-                className="bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white px-5 py-2.5 rounded-xl font-medium transition-colors"
+                className="bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95"
               >
                 Go Back
               </button>
@@ -286,7 +305,7 @@ export default function VideoPlayer({
       {/* Player Controls Overlay */}
       <div
         className={`absolute inset-0 transition-opacity duration-300 ${
-          showControls && !error ? 'opacity-100' : 'opacity-0 pointer-events-none'
+          showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         } z-30`}
       >
         <PlayerControls

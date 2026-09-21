@@ -3,11 +3,15 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useSettingsStore } from '@/store/useSettingsStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import { buildStreamUrl } from '@/utils/url';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
+import ErrorBoundary from '@/components/ui/ErrorBoundary';
 import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
+import { Capacitor } from '@capacitor/core';
+import { ArrowLeft } from 'lucide-react';
 
 const PlayerPage: React.FC = () => {
   const { type, streamId } = useParams<{ type: 'live' | 'vod' | 'series'; streamId: string }>();
@@ -18,17 +22,19 @@ const PlayerPage: React.FC = () => {
   const api = useXtreamAPI();
   const { addToHistory, updateProgress } = useHistoryStore();
   const { currentTime, duration } = usePlayerStore();
+  const { preferredPlayer } = useSettingsStore();
 
   // Smart default extension based on stream type: Live defaults to m3u8, VOD/Series default to mp4
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
   const paramExt = searchParams.get('ext');
   const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') ? paramExt : defaultExt;
-  // Force mp4 over mkv/avi for browser and webview decoder compatibility
+  // Normalize mkv/avi to mp4 for universal browser/webview decoder compatibility
   const normalizedExt = (type !== 'live' && (validExt === 'mkv' || validExt === 'avi')) ? 'mp4' : validExt;
   const [currentExt, setCurrentExt] = useState<string>(normalizedExt);
 
   const [streamUrl, setStreamUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
+  const hasAutoLaunchedRef = useRef<boolean>(false);
   
   const title = searchParams.get('name') || 'Unknown Stream';
   const icon = searchParams.get('icon') || '';
@@ -68,12 +74,24 @@ const PlayerPage: React.FC = () => {
       const streamType = type === 'vod' ? 'movie' : (type as 'live' | 'movie' | 'series');
       url = buildStreamUrl(serverUrl, username, password, streamType, parseInt(streamId), currentExt);
     } else {
-      setError('Cannot construct stream URL. Authentication missing.');
+      setError('Cannot construct stream URL. Authentication credentials missing.');
       return;
     }
 
     console.log(`[OnyxStream] Playing ${type} stream:`, url);
     setStreamUrl(url);
+
+    // Auto-launch external or native player if configured in Settings
+    if (!hasAutoLaunchedRef.current && url) {
+      hasAutoLaunchedRef.current = true;
+      if (preferredPlayer === 'native' && Capacitor.isNativePlatform()) {
+        openInNativePlayer(url, title, type === 'live');
+      } else if (preferredPlayer === 'vlc' && Capacitor.isNativePlatform()) {
+        openInVlc(url, title);
+      } else if (preferredPlayer === 'mx' && Capacitor.isNativePlatform()) {
+        openInMxPlayer(url, title);
+      }
+    }
 
     // Add to history
     addToHistory({
@@ -90,7 +108,7 @@ const PlayerPage: React.FC = () => {
       containerExtension: currentExt,
     });
 
-  }, [type, streamId, api, directUrl, currentExt, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
+  }, [type, streamId, api, directUrl, currentExt, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory, preferredPlayer]);
 
   // Handle unmount to save progress
   useEffect(() => {
@@ -109,80 +127,91 @@ const PlayerPage: React.FC = () => {
     if (type === 'live') {
       setCurrentExt(prev => (prev === 'm3u8' ? 'ts' : 'm3u8'));
     } else {
-      setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : prev === 'm3u8' ? 'mkv' : 'mp4'));
+      setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : 'mp4'));
     }
   };
 
   if (error) {
     return (
-      <div className="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white p-6 text-center">
-        <h2 className="text-2xl font-bold mb-4 text-red-500">Playback Error</h2>
-        <p className="text-gray-300 mb-8 max-w-md">{error}</p>
-        <div className="flex items-center gap-3">
-          <button onClick={handleBack} className="bg-gray-800 hover:bg-gray-700 px-6 py-2 rounded-lg font-medium transition-colors">
-            Go Back
-          </button>
-        </div>
+      <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col items-center justify-center text-white p-6 text-center">
+        <h2 className="text-2xl font-bold mb-3 text-red-500">Playback Error</h2>
+        <p className="text-gray-300 mb-8 max-w-md text-sm">{error}</p>
+        <button 
+          onClick={handleBack} 
+          className="flex items-center gap-2 bg-gray-800 hover:bg-gray-700 text-white px-6 py-2.5 rounded-xl font-medium transition-colors"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Go Back
+        </button>
       </div>
     );
   }
 
   if (!streamUrl) {
     return (
-      <div className="fixed inset-0 bg-black z-50 flex items-center justify-center">
+      <div className="fixed inset-0 bg-gray-950 z-50 flex flex-col items-center justify-center">
         <LoadingSpinner message="Connecting to stream..." />
+        <button 
+          onClick={handleBack} 
+          className="mt-6 flex items-center gap-2 text-xs text-gray-400 hover:text-white px-4 py-2 rounded-lg bg-gray-900 border border-gray-800"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Cancel & Go Back
+        </button>
       </div>
     );
   }
 
   return (
-    <div className="fixed inset-0 bg-black z-[100] overflow-hidden">
-      <VideoPlayer 
-        src={streamUrl} 
-        title={title} 
-        type={type as 'live' | 'vod' | 'series'} 
-        onBack={handleBack}
-        onFormatFallback={toggleStreamFormat}
-      />
+    <ErrorBoundary>
+      <div className="fixed inset-0 bg-black z-[100] overflow-hidden select-none">
+        <VideoPlayer 
+          src={streamUrl} 
+          title={title} 
+          type={type as 'live' | 'vod' | 'series'} 
+          onBack={handleBack}
+          onFormatFallback={toggleStreamFormat}
+        />
 
-      {/* Top Right Quick Launchers & Format Switcher */}
-      <div className="absolute top-4 right-16 z-40 flex items-center gap-2">
-        <button
-          onClick={() => openInNativePlayer(streamUrl, title, type === 'live')}
-          className="bg-indigo-600/90 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-indigo-500/40"
-          title="Open in Internal Native Hardware Player (ExoPlayer)"
-        >
-          <span>🚀</span>
-          <span>Native</span>
-        </button>
+        {/* Top Right Quick Launchers & Format Switcher */}
+        <div className="absolute top-4 right-14 z-40 flex items-center gap-2 pointer-events-auto">
+          <button
+            onClick={() => openInNativePlayer(streamUrl, title, type === 'live')}
+            className="bg-indigo-600/90 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-indigo-500/40"
+            title="Open in Internal Native Hardware Player (ExoPlayer)"
+          >
+            <span>🚀</span>
+            <span>Native</span>
+          </button>
 
-        <button
-          onClick={() => openInVlc(streamUrl, title)}
-          className="bg-orange-600/90 hover:bg-orange-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-orange-500/40"
-          title="Open in VLC Player"
-        >
-          <span>🟧</span>
-          <span>VLC</span>
-        </button>
+          <button
+            onClick={() => openInVlc(streamUrl, title)}
+            className="bg-orange-600/90 hover:bg-orange-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-orange-500/40"
+            title="Open in VLC Player"
+          >
+            <span>🟧</span>
+            <span>VLC</span>
+          </button>
 
-        <button
-          onClick={() => openInMxPlayer(streamUrl, title)}
-          className="bg-blue-600/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-blue-500/40"
-          title="Open in MX Player"
-        >
-          <span>🟦</span>
-          <span>MX</span>
-        </button>
+          <button
+            onClick={() => openInMxPlayer(streamUrl, title)}
+            className="bg-blue-600/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-blue-500/40"
+            title="Open in MX Player"
+          >
+            <span>🟦</span>
+            <span>MX</span>
+          </button>
 
-        <button
-          onClick={toggleStreamFormat}
-          className="bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
-          title="Switch stream format (MP4, HLS/M3U8, or MKV/TS)"
-        >
-          Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
-        </button>
+          <button
+            onClick={toggleStreamFormat}
+            className="bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
+            title="Switch stream format (MP4 or HLS/M3U8)"
+          >
+            Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
+          </button>
+        </div>
       </div>
-    </div>
+    </ErrorBoundary>
   );
 };
 
