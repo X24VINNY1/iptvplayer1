@@ -1,3 +1,5 @@
+import { Capacitor } from '@capacitor/core';
+
 export const normalizeServerUrl = (url: string): string => {
   let normalized = url.trim();
   if (normalized.endsWith('/')) {
@@ -39,4 +41,21 @@ export const buildStreamUrl = (
   extension: string = 'm3u8'
 ): string => {
   return `${serverUrl}/${type}/${username}/${password}/${streamId}.${extension}`;
+};
+
+/**
+ * Resolves the optimal playback stream URL.
+ * In Web browsers (especially on HTTPS like Render), it routes through the backend /proxy
+ * endpoint to eliminate Mixed Content (HTTP -> HTTPS) and CORS restrictions completely.
+ */
+export const getStreamPlaybackUrl = (rawUrl: string): string => {
+  if (!rawUrl) return '';
+
+  // Inside Native Android APK, cleartext traffic is enabled so direct stream URL is optimal
+  if (Capacitor.isNativePlatform()) {
+    return rawUrl;
+  }
+
+  // In Web browser environments, route through the streaming proxy
+  return `/proxy?url=${encodeURIComponent(rawUrl)}`;
 };

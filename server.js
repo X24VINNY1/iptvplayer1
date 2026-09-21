@@ -12,47 +12,162 @@ const PORT = process.env.PORT || 3000;
 // Enable JSON parsing
 app.use(express.json());
 
-// CORS headers for all requests
+// Global CORS headers
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PUT, DELETE');
-  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization, Range');
+  res.header('Access-Control-Expose-Headers', 'Content-Length, Content-Range, Accept-Ranges');
   if (req.method === 'OPTIONS') {
     return res.sendStatus(200);
   }
   next();
 });
 
-// Generic Proxy endpoint to bypass Browser Mixed Content (HTTPS -> HTTP) and CORS
-app.get('/proxy', async (req, res) => {
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', timestamp: Date.now(), proxy: true });
+});
+
+/**
+ * Rewrites an M3U8 manifest content so all segment paths and nested playlists
+ * route cleanly through the same-origin /proxy endpoint over HTTPS with full CORS.
+ */
+function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
+  const lines = content.split('\n');
+  const rewritten = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
+
+    // Handle URI inside EXT-X tags (e.g. #EXT-X-MEDIA:TYPE=AUDIO,...,URI="audio.m3u8")
+    if (trimmed.startsWith('#EXT-X-MEDIA:') && trimmed.includes('URI="')) {
+      return line.replace(/URI="([^"]+)"/, (_, uri) => {
+        try {
+          const resolved = new URL(uri, baseUrl).toString();
+          return `URI="${proxyEndpoint}${encodeURIComponent(resolved)}"`;
+        } catch {
+          return `URI="${uri}"`;
+        }
+      });
+    }
+
+    // Pass comments and tags through as-is
+    if (trimmed.startsWith('#')) {
+      return line;
+    }
+
+    // Segment line or nested playlist URL
+    try {
+      const resolved = new URL(trimmed, baseUrl).toString();
+      return `${proxyEndpoint}${encodeURIComponent(resolved)}`;
+    } catch {
+      return line;
+    }
+  });
+
+  return rewritten.join('\n');
+}
+
+/**
+ * High-Performance IPTV Streaming Proxy
+ * - Eliminates Mixed Content (HTTPS -> HTTP) and CORS blocks
+ * - Rewrites M3U8 playlists so all TS/AAC/MP4 segments stream through HTTPS
+ * - Supports HTTP 206 Partial Content (Byte Range requests) for seeking and buffering MP4 VOD
+ * - Emulates VLC/IPTVSmarters User-Agent so IPTV providers don't block web playback
+ */
+const handleProxyRequest = async (req, res) => {
   const targetUrl = req.query.url;
   if (!targetUrl || typeof targetUrl !== 'string') {
     return res.status(400).send('Missing "url" query parameter');
   }
 
-  try {
-    const response = await axios({
-      method: 'get',
-      url: targetUrl,
-      responseType: 'stream',
-      headers: {
-        'User-Agent': 'IPTVSmarters/1.0.0 (Linux; Android 10)'
-      },
-      timeout: 15000
-    });
+  const isM3U8 = targetUrl.toLowerCase().includes('.m3u8');
 
-    // Forward status & content-type
-    res.status(response.status);
-    if (response.headers['content-type']) {
-      res.setHeader('Content-Type', response.headers['content-type']);
-    }
+  // Forward Range header if present (crucial for MP4 seeking and smooth video playback)
+  const outgoingHeaders = {
+    'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
+    'Accept': '*/*',
+    'Connection': 'keep-alive'
+  };
 
-    response.data.pipe(res);
-  } catch (error) {
-    console.error('Proxy error:', error.message);
-    res.status(502).send(`Proxy Error: ${error.message}`);
+  if (req.headers.range) {
+    outgoingHeaders['Range'] = req.headers.range;
   }
-});
+
+  try {
+    if (isM3U8) {
+      // Manifest request: fetch text and rewrite internal segment URLs
+      const response = await axios({
+        method: 'get',
+        url: targetUrl,
+        responseType: 'text',
+        headers: outgoingHeaders,
+        timeout: 15000,
+        validateStatus: (status) => status < 400
+      });
+
+      const rewrittenManifest = rewriteM3U8(response.data, targetUrl, '/proxy?url=');
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      return res.status(200).send(rewrittenManifest);
+    } else {
+      // Media segment / video stream request: stream binary chunks with Range support
+      const response = await axios({
+        method: 'get',
+        url: targetUrl,
+        responseType: 'stream',
+        headers: outgoingHeaders,
+        timeout: 30000,
+        maxContentLength: Infinity,
+        maxBodyLength: Infinity,
+        validateStatus: (status) => status < 400
+      });
+
+      // Forward response status (200 OK or 206 Partial Content)
+      res.status(response.status);
+
+      // Forward crucial media streaming headers
+      const headersToForward = [
+        'content-type',
+        'content-length',
+        'content-range',
+        'accept-ranges',
+        'content-duration'
+      ];
+
+      for (const header of headersToForward) {
+        if (response.headers[header]) {
+          res.setHeader(header, response.headers[header]);
+        }
+      }
+
+      if (!response.headers['accept-ranges']) {
+        res.setHeader('Accept-Ranges', 'bytes');
+      }
+
+      // Clean up upstream connection if client closes connection early (e.g. user seeks or switches channel)
+      req.on('close', () => {
+        if (response.data && typeof response.data.destroy === 'function') {
+          response.data.destroy();
+        }
+      });
+
+      return response.data.pipe(res);
+    }
+  } catch (error) {
+    console.warn(`[Proxy Warn] ${targetUrl}:`, error.message);
+    if (!res.headersSent) {
+      return res.status(502).json({
+        error: 'Proxy Stream Error',
+        message: error.message,
+        targetUrl
+      });
+    }
+  }
+};
+
+app.get('/proxy', handleProxyRequest);
+app.get('/api/proxy', handleProxyRequest);
 
 // Serve compiled static assets
 app.use(express.static(path.join(__dirname, 'dist')));

@@ -3,14 +3,12 @@ import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { usePlayerStore } from '@/store/usePlayerStore';
-import { useSettingsStore } from '@/store/useSettingsStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
-import { buildStreamUrl } from '@/utils/url';
+import { buildStreamUrl, getStreamPlaybackUrl } from '@/utils/url';
 import VideoPlayer from '@/components/player/VideoPlayer';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
-import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
-import { Capacitor } from '@capacitor/core';
+import { LiveStream } from '@/types';
 import { ArrowLeft } from 'lucide-react';
 
 const PlayerPage: React.FC = () => {
@@ -22,19 +20,17 @@ const PlayerPage: React.FC = () => {
   const api = useXtreamAPI();
   const { addToHistory, updateProgress } = useHistoryStore();
   const { currentTime, duration } = usePlayerStore();
-  const { preferredPlayer } = useSettingsStore();
 
-  // Smart default extension based on stream type: Live defaults to m3u8, VOD/Series default to mp4
+  // Smart default format extension
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
   const paramExt = searchParams.get('ext');
   const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') ? paramExt : defaultExt;
-  // Normalize mkv/avi to mp4 for universal browser/webview decoder compatibility
+  // Normalize mkv/avi to mp4 for universal HTML5 browser decoder support
   const normalizedExt = (type !== 'live' && (validExt === 'mkv' || validExt === 'avi')) ? 'mp4' : validExt;
   const [currentExt, setCurrentExt] = useState<string>(normalizedExt);
 
   const [streamUrl, setStreamUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
-  const hasAutoLaunchedRef = useRef<boolean>(false);
   
   const title = searchParams.get('name') || 'Unknown Stream';
   const icon = searchParams.get('icon') || '';
@@ -58,40 +54,30 @@ const PlayerPage: React.FC = () => {
       return;
     }
 
-    let url = '';
+    let rawUrl = '';
     
     if (directUrl) {
-      url = directUrl;
+      rawUrl = directUrl;
     } else if (api) {
       if (type === 'live') {
-        url = api.getLiveStreamUrl(parseInt(streamId), currentExt);
+        rawUrl = api.getLiveStreamUrl(parseInt(streamId), currentExt);
       } else if (type === 'vod') {
-        url = api.getVodStreamUrl(parseInt(streamId), currentExt);
+        rawUrl = api.getVodStreamUrl(parseInt(streamId), currentExt);
       } else if (type === 'series') {
-        url = api.getSeriesStreamUrl(parseInt(streamId), currentExt);
+        rawUrl = api.getSeriesStreamUrl(parseInt(streamId), currentExt);
       }
     } else if (serverUrl && username && password) {
       const streamType = type === 'vod' ? 'movie' : (type as 'live' | 'movie' | 'series');
-      url = buildStreamUrl(serverUrl, username, password, streamType, parseInt(streamId), currentExt);
+      rawUrl = buildStreamUrl(serverUrl, username, password, streamType, parseInt(streamId), currentExt);
     } else {
       setError('Cannot construct stream URL. Authentication credentials missing.');
       return;
     }
 
-    console.log(`[OnyxStream] Playing ${type} stream:`, url);
-    setStreamUrl(url);
-
-    // Auto-launch external or native player if configured in Settings
-    if (!hasAutoLaunchedRef.current && url) {
-      hasAutoLaunchedRef.current = true;
-      if (preferredPlayer === 'native' && Capacitor.isNativePlatform()) {
-        openInNativePlayer(url, title, type === 'live');
-      } else if (preferredPlayer === 'vlc' && Capacitor.isNativePlatform()) {
-        openInVlc(url, title);
-      } else if (preferredPlayer === 'mx' && Capacitor.isNativePlatform()) {
-        openInMxPlayer(url, title);
-      }
-    }
+    // Convert to optimal playback URL (routes through streaming proxy on Web to bypass Mixed Content & CORS)
+    const effectivePlaybackUrl = getStreamPlaybackUrl(rawUrl);
+    console.log(`[OnyxStream] Playing ${type} stream via web proxy:`, effectivePlaybackUrl);
+    setStreamUrl(effectivePlaybackUrl);
 
     // Add to history
     addToHistory({
@@ -108,7 +94,7 @@ const PlayerPage: React.FC = () => {
       containerExtension: currentExt,
     });
 
-  }, [type, streamId, api, directUrl, currentExt, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory, preferredPlayer]);
+  }, [type, streamId, api, directUrl, currentExt, serverUrl, username, password, title, icon, season, episode, seriesIdParam, addToHistory]);
 
   // Handle unmount to save progress
   useEffect(() => {
@@ -128,6 +114,14 @@ const PlayerPage: React.FC = () => {
       setCurrentExt(prev => (prev === 'm3u8' ? 'ts' : 'm3u8'));
     } else {
       setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : 'mp4'));
+    }
+  };
+
+  const handleSelectChannel = (channel: LiveStream) => {
+    if (channel.direct_source) {
+      navigate(`/player/live/${channel.stream_id}?name=${encodeURIComponent(channel.name)}&directUrl=${encodeURIComponent(channel.direct_source)}`, { replace: true });
+    } else {
+      navigate(`/player/live/${channel.stream_id}?name=${encodeURIComponent(channel.name)}&icon=${encodeURIComponent(channel.stream_icon || '')}`, { replace: true });
     }
   };
 
@@ -169,47 +163,11 @@ const PlayerPage: React.FC = () => {
           src={streamUrl} 
           title={title} 
           type={type as 'live' | 'vod' | 'series'} 
+          currentFormat={currentExt}
           onBack={handleBack}
           onFormatFallback={toggleStreamFormat}
+          onSelectChannel={handleSelectChannel}
         />
-
-        {/* Top Right Quick Launchers & Format Switcher */}
-        <div className="absolute top-4 right-14 z-40 flex items-center gap-2 pointer-events-auto">
-          <button
-            onClick={() => openInNativePlayer(streamUrl, title, type === 'live')}
-            className="bg-indigo-600/90 hover:bg-indigo-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-indigo-500/40"
-            title="Open in Internal Native Hardware Player (ExoPlayer)"
-          >
-            <span>🚀</span>
-            <span>Native</span>
-          </button>
-
-          <button
-            onClick={() => openInVlc(streamUrl, title)}
-            className="bg-orange-600/90 hover:bg-orange-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-orange-500/40"
-            title="Open in VLC Player"
-          >
-            <span>🟧</span>
-            <span>VLC</span>
-          </button>
-
-          <button
-            onClick={() => openInMxPlayer(streamUrl, title)}
-            className="bg-blue-600/90 hover:bg-blue-600 text-white px-3 py-1.5 rounded-full text-xs font-semibold shadow-lg transition-all backdrop-blur-md active:scale-95 flex items-center gap-1.5 border border-blue-500/40"
-            title="Open in MX Player"
-          >
-            <span>🟦</span>
-            <span>MX</span>
-          </button>
-
-          <button
-            onClick={toggleStreamFormat}
-            className="bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
-            title="Switch stream format (MP4 or HLS/M3U8)"
-          >
-            Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
-          </button>
-        </div>
       </div>
     </ErrorBoundary>
   );

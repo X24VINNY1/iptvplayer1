@@ -1,26 +1,30 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, Tv, Globe } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
-import { openInNativePlayer, openInVlc, openInMxPlayer } from '@/utils/nativePlayer';
+import { LiveStream } from '@/types';
 
 interface VideoPlayerProps {
   src: string;
   title?: string;
   type?: 'live' | 'vod' | 'series';
+  currentFormat?: string;
   onBack?: () => void;
   autoPlay?: boolean;
   onFormatFallback?: () => void;
+  onSelectChannel?: (channel: LiveStream) => void;
 }
 
 export default function VideoPlayer({
   src,
   title,
   type = 'vod',
+  currentFormat = 'AUTO',
   onBack,
   autoPlay = true,
-  onFormatFallback
+  onFormatFallback,
+  onSelectChannel
 }: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -37,9 +41,7 @@ export default function VideoPlayer({
     reset,
     setIsFullscreen,
     setVolume,
-    toggleMute,
-    useProxy,
-    toggleProxy
+    toggleMute
   } = usePlayerStore();
 
   useEffect(() => {
@@ -70,7 +72,7 @@ export default function VideoPlayer({
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
   }, [setIsFullscreen]);
 
-  // Keyboard & D-Pad navigation for Android TV remotes
+  // Keyboard & D-Pad navigation for Android TV remotes & web shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       handleUserActivity();
@@ -78,6 +80,8 @@ export default function VideoPlayer({
 
       switch (e.key) {
         case ' ':
+        case 'k':
+        case 'K':
         case 'Enter':
         case 'Select':
           e.preventDefault();
@@ -186,14 +190,14 @@ export default function VideoPlayer({
             e.stopPropagation();
             onBack();
           }}
-          className="absolute top-4 left-4 z-50 p-3 rounded-full bg-black/70 hover:bg-black/90 text-white/90 hover:text-white backdrop-blur-md transition-all border border-white/10 shadow-lg opacity-80 hover:opacity-100"
-          title="Go Back"
+          className="absolute top-4 left-4 z-50 p-2.5 rounded-xl bg-black/70 hover:bg-black/90 text-white/90 hover:text-white backdrop-blur-md transition-all border border-white/10 shadow-lg"
+          title="Go Back (Esc)"
         >
           <ArrowLeft className="w-5 h-5" />
         </button>
       )}
 
-      {/* Click to Play Overlay (fixes autoplay blocks and clarifies ready state) */}
+      {/* Click to Start Playback Overlay (Bypasses Browser Autoplay Restrictions) */}
       {!isLoading && !error && (!isPlaying || (videoRef.current && videoRef.current.paused)) && (
         <div 
           onClick={(e) => {
@@ -205,7 +209,7 @@ export default function VideoPlayer({
           }}
           className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 z-20 cursor-pointer backdrop-blur-[2px] transition-all group/play"
         >
-          <div className="w-20 h-20 rounded-full bg-indigo-600/90 group-hover/play:bg-indigo-500 group-hover/play:scale-110 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/50 transition-all">
+          <div className="w-20 h-20 rounded-2xl bg-indigo-600/90 group-hover/play:bg-indigo-500 group-hover/play:scale-105 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/50 transition-all">
             <Play className="w-10 h-10 fill-current ml-1" />
           </div>
           <p className="text-white text-sm font-semibold mt-4 drop-shadow-md tracking-wide">
@@ -216,84 +220,49 @@ export default function VideoPlayer({
 
       {/* Loading Spinner Overlay */}
       {isLoading && !error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10 pointer-events-none">
-          <Loader2 className="w-14 h-14 text-indigo-500 animate-spin mb-3" />
-          <p className="text-gray-300 text-sm font-medium animate-pulse">Buffering stream...</p>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/60 z-10 pointer-events-none">
+          <Loader2 className="w-12 h-12 text-indigo-500 animate-spin mb-3" />
+          <p className="text-gray-300 text-xs font-medium tracking-wide animate-pulse">
+            Connecting & Buffering Stream...
+          </p>
         </div>
       )}
 
-      {/* Error Overlay with Native Player / VLC / MX Player 1-Click Launchers */}
+      {/* Playback Error Overlay with In-App Healing Actions */}
       {error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-gray-950/95 z-40 p-6 text-center">
-          <AlertCircle className="w-16 h-16 text-amber-500 mb-4 animate-bounce" />
-          <h2 className="text-2xl font-bold text-white mb-2">Playback Notice</h2>
-          <p className="text-gray-300 mb-6 max-w-lg text-sm leading-relaxed">{error}</p>
+          <div className="w-16 h-16 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-500 mb-4 shadow-lg shadow-amber-500/20">
+            <AlertCircle className="w-8 h-8" />
+          </div>
+          <h2 className="text-xl font-bold text-white mb-2">Stream Playback Notice</h2>
+          <p className="text-gray-300 mb-6 max-w-md text-xs sm:text-sm leading-relaxed">{error}</p>
           
-          <div className="flex flex-wrap items-center justify-center gap-3 max-w-xl">
-            {/* Native Hardware Player */}
-            <button
-              onClick={() => openInNativePlayer(src, title || 'OnyxStream', type === 'live')}
-              className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
-            >
-              <Tv className="w-4 h-4" />
-              Play in Native Player
-            </button>
-
-            {/* VLC Player */}
-            <button
-              onClick={() => openInVlc(src, title || 'OnyxStream')}
-              className="bg-orange-600 hover:bg-orange-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-orange-600/30 active:scale-95"
-            >
-              <span>🟧</span>
-              Play in VLC
-            </button>
-
-            {/* MX Player */}
-            <button
-              onClick={() => openInMxPlayer(src, title || 'OnyxStream')}
-              className="bg-blue-600 hover:bg-blue-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-blue-600/30 active:scale-95"
-            >
-              <span>🟦</span>
-              Play in MX Player
-            </button>
-
+          <div className="flex flex-wrap items-center justify-center gap-3 max-w-md">
             {/* Auto-Fix Format Switcher */}
             {onFormatFallback && (
               <button
                 onClick={onFormatFallback}
-                className="bg-emerald-600 hover:bg-emerald-500 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
+                className="bg-indigo-600 hover:bg-indigo-500 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
               >
                 <RefreshCw className="w-4 h-4" />
-                Switch Format (MP4 / M3U8)
+                Switch Format (MP4 / HLS)
               </button>
             )}
 
-            {/* Toggle Cloud Proxy */}
-            <button
-              onClick={() => {
-                toggleProxy();
-                retry();
-              }}
-              className="bg-gray-800 hover:bg-gray-700 text-amber-400 px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
-            >
-              <Globe className="w-4 h-4" />
-              {useProxy ? 'Turn Off Proxy' : 'Enable Cloud Proxy'}
-            </button>
-
-            {/* Retry */}
+            {/* Retry Stream */}
             <button
               onClick={retry}
-              className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
+              className="bg-gray-800 hover:bg-gray-700 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-semibold transition-all flex items-center gap-2 shadow active:scale-95 border border-gray-700"
             >
-              <RefreshCw className="w-4 h-4" />
-              Retry
+              <RotateCcw className="w-4 h-4" />
+              Retry Connection
             </button>
 
             {/* Go Back */}
             {onBack && (
               <button
                 onClick={onBack}
-                className="bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white px-5 py-2.5 rounded-xl font-medium transition-all active:scale-95"
+                className="bg-gray-900 hover:bg-gray-800 text-gray-400 hover:text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-medium transition-all active:scale-95 border border-gray-800"
               >
                 Go Back
               </button>
@@ -302,10 +271,10 @@ export default function VideoPlayer({
         </div>
       )}
 
-      {/* Player Controls Overlay */}
+      {/* Modern Player Controls Overlay */}
       <div
         className={`absolute inset-0 transition-opacity duration-300 ${
-          showControls ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
         } z-30`}
       >
         <PlayerControls
@@ -313,8 +282,11 @@ export default function VideoPlayer({
           src={src}
           isLive={type === 'live'}
           title={title}
+          currentFormat={currentFormat}
           onBack={onBack}
           onFlushAndResync={flushAndResync}
+          onToggleFormat={onFormatFallback}
+          onSelectChannel={onSelectChannel}
         />
       </div>
     </div>
