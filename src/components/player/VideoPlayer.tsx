@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle, RefreshCw, Globe } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw, Globe, Play, ArrowLeft } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 
 interface VideoPlayerProps {
@@ -30,6 +30,7 @@ export default function VideoPlayer({
   const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay, onFormatFallback);
 
   const {
+    isPlaying,
     isLoading,
     error,
     reset,
@@ -50,15 +51,18 @@ export default function VideoPlayer({
     if (hideControlsTimeout.current) {
       clearTimeout(hideControlsTimeout.current);
     }
-    hideControlsTimeout.current = setTimeout(() => {
-      if (videoRef.current && !videoRef.current.paused) {
-        setShowControls(false);
-      }
-    }, 3500);
+    // Only schedule fade-out if the video is actually playing and not stalled/paused
+    if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
+      hideControlsTimeout.current = setTimeout(() => {
+        if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
+          setShowControls(false);
+        }
+      }, 4000);
+    }
   };
 
   const handleMouseLeave = () => {
-    if (videoRef.current && !videoRef.current.paused) {
+    if (videoRef.current && !videoRef.current.paused && isPlaying && !isLoading) {
       setShowControls(false);
     }
   };
@@ -172,6 +176,43 @@ export default function VideoPlayer({
         }}
       />
 
+      {/* Persistent Emergency Back Button - always accessible even if controls fade */}
+      {onBack && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onBack();
+          }}
+          className={`absolute top-4 left-4 z-50 p-2.5 rounded-full bg-black/60 hover:bg-black/90 text-white/80 hover:text-white backdrop-blur-md transition-all border border-white/10 shadow-lg ${
+            showControls ? 'opacity-0 pointer-events-none' : 'opacity-70 hover:opacity-100'
+          }`}
+          title="Go Back"
+        >
+          <ArrowLeft className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Click to Play Overlay (fixes browser autoplay blocking & gives clear visual feedback) */}
+      {!isLoading && !error && (!isPlaying || (videoRef.current && videoRef.current.paused)) && (
+        <div 
+          onClick={(e) => {
+            e.stopPropagation();
+            if (videoRef.current) {
+              videoRef.current.play().catch(console.warn);
+              setShowControls(true);
+            }
+          }}
+          className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 z-20 cursor-pointer backdrop-blur-[2px] transition-all group/play"
+        >
+          <div className="w-20 h-20 rounded-full bg-indigo-600/90 group-hover/play:bg-indigo-500 group-hover/play:scale-110 flex items-center justify-center text-white shadow-2xl shadow-indigo-500/50 transition-all">
+            <Play className="w-10 h-10 fill-current ml-1" />
+          </div>
+          <p className="text-white text-sm font-semibold mt-4 drop-shadow-md tracking-wide">
+            Click to Start Playback
+          </p>
+        </div>
+      )}
+
       {/* Loading Spinner Overlay */}
       {isLoading && !error && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10 pointer-events-none">
@@ -193,7 +234,7 @@ export default function VideoPlayer({
                 retry();
               }}
               className="bg-amber-600 hover:bg-amber-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-amber-600/30 active:scale-95"
-              title="Relays the stream through a high-speed HTTPS/CORS proxy to bypass browser security blocks"
+              title="Relays HLS streams through high-speed HTTPS/CORS proxy to bypass browser SSL blocks"
             >
               <Globe className="w-4 h-4" />
               {useProxy ? 'Proxy Active (Click to Disable)' : '⚡ Enable Cloud Proxy (Bypass SSL / CORS)'}
@@ -204,7 +245,7 @@ export default function VideoPlayer({
                 className="bg-emerald-600 hover:bg-emerald-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-emerald-600/30 active:scale-95"
               >
                 <RefreshCw className="w-4 h-4" />
-                Auto-Fix Format (Switch TS / M3U8)
+                Auto-Fix Format (Switch MP4 / M3U8)
               </button>
             )}
             <button

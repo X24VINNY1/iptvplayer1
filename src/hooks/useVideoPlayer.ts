@@ -28,7 +28,7 @@ export function useVideoPlayer(
   const hlsRef = useRef<Hls | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecoveriesRef = useRef<number>(0);
-  const attemptsRef = useRef<number>(0);
+  const fallbackCountRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
   const blobUrlRef = useRef<string | null>(null);
@@ -145,6 +145,7 @@ export function useVideoPlayer(
 
     video.oncanplay = () => {
       setIsLoading(false);
+      fallbackCountRef.current = 0;
       if (autoPlay) {
         video.play().catch((e) => {
           console.warn('Autoplay prevented:', e.message);
@@ -193,36 +194,34 @@ export function useVideoPlayer(
         return;
       }
 
-      // If format fallback is available and hasn't been tried, automatically try it!
-      if (onFormatFallback && attemptsRef.current === 0) {
-        attemptsRef.current += 1;
-        console.log('[OnyxStream] Format error encountered. Auto-trying alternate stream format...');
+      // If format fallback is available and hasn't exceeded 2 tries, automatically try it!
+      if (onFormatFallback && fallbackCountRef.current < 2) {
+        fallbackCountRef.current += 1;
+        console.log(`[OnyxStream] Format error encountered. Auto-trying alternate stream format (attempt ${fallbackCountRef.current})...`);
         onFormatFallback();
         return;
       }
 
       setError(
-        'Format Error: Stream format unsupported by browser decoder. On Web, enable "Proxy Mode" or use "Auto-Fix Format" to switch TS / M3U8.'
+        'Format Error: Stream format unsupported by browser decoder. Use "Auto-Fix Format" to toggle MP4 / M3U8, or enable Cloud Proxy.'
       );
       setIsLoading(false);
     };
 
-    // URL resolution & CORS proxy handling
+    // Proxy routing: Only proxy HLS (.m3u8) streams where manifest/segment text is parsed by JS.
+    // NEVER send direct multi-gigabyte VOD movie files (MP4/MKV) through public CORS proxies because of size limits!
     let effectiveSrc = src;
     const isNative = Capacitor.isNativePlatform();
     const isHttpsWeb = typeof window !== 'undefined' && window.location.protocol === 'https:';
     const isHttpStream = src.startsWith('http://');
 
-    // If running in browser over HTTPS with an HTTP IPTV stream, or if useProxy is enabled:
-    // Route through high-performance CORS proxy to prevent browser Mixed Content & CORS blocks!
-    if (useProxy || (!isNative && isHttpsWeb && isHttpStream)) {
+    const isHlsUrl =
+      src.includes('.m3u8') ||
+      (type === 'live' && !src.endsWith('.mp4'));
+
+    if (isHlsUrl && (useProxy || (!isNative && isHttpsWeb && isHttpStream))) {
       effectiveSrc = `https://corsproxy.io/?url=${encodeURIComponent(src)}`;
     }
-
-    const isHlsUrl =
-      effectiveSrc.includes('.m3u8') ||
-      type === 'live' ||
-      effectiveSrc.includes('/live/');
 
     const isRawTs = effectiveSrc.endsWith('.ts') || effectiveSrc.includes('.ts?') || effectiveSrc.includes('/live/');
 
@@ -247,7 +246,7 @@ export function useVideoPlayer(
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setIsLoading(false);
-        attemptsRef.current = 0;
+        fallbackCountRef.current = 0;
         if (autoPlay) {
           video.play().catch((err) => {
             console.warn('Autoplay prevented:', err.message);
@@ -283,7 +282,8 @@ export function useVideoPlayer(
                 hls.recoverMediaError();
               } else {
                 console.warn('[Anti-Lag] Fatal media error unrecoverable. Attempting fallback...');
-                if (onFormatFallback) {
+                if (onFormatFallback && fallbackCountRef.current < 2) {
+                  fallbackCountRef.current += 1;
                   onFormatFallback();
                 } else {
                   setError('Media format error: Decoder encountered unsupported stream codec.');
@@ -293,7 +293,8 @@ export function useVideoPlayer(
 
             default:
               console.warn('[Anti-Lag] Fatal HLS error:', data.details);
-              if (onFormatFallback) {
+              if (onFormatFallback && fallbackCountRef.current < 2) {
+                fallbackCountRef.current += 1;
                 onFormatFallback();
               } else {
                 setError(`Playback Error: ${data.details}`);
@@ -386,15 +387,19 @@ export function useVideoPlayer(
   }, [antiLagEnabled, type, incrementLagRecovery, videoRef]);
 
   useEffect(() => {
-    attemptsRef.current = 0;
     initPlayer();
     return () => cleanup();
   }, [initPlayer, cleanup]);
 
   const flushAndResync = () => {
-    attemptsRef.current = 0;
+    fallbackCountRef.current = 0;
     initPlayer();
   };
 
-  return { retry: initPlayer, flushAndResync };
+  const retry = () => {
+    fallbackCountRef.current = 0;
+    initPlayer();
+  };
+
+  return { retry, flushAndResync };
 }

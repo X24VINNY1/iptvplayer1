@@ -20,8 +20,11 @@ const PlayerPage: React.FC = () => {
 
   // Smart default extension based on stream type: Live defaults to m3u8, VOD/Series default to mp4
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
-  const requestedExt = searchParams.get('ext') || defaultExt;
-  const [currentExt, setCurrentExt] = useState<string>(requestedExt);
+  const paramExt = searchParams.get('ext');
+  const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') ? paramExt : defaultExt;
+  // Force mp4 over mkv/avi for browser and webview decoder compatibility
+  const normalizedExt = (type !== 'live' && (validExt === 'mkv' || validExt === 'avi')) ? 'mp4' : validExt;
+  const [currentExt, setCurrentExt] = useState<string>(normalizedExt);
 
   const [streamUrl, setStreamUrl] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +108,7 @@ const PlayerPage: React.FC = () => {
     if (type === 'live') {
       setCurrentExt(prev => (prev === 'm3u8' ? 'ts' : 'm3u8'));
     } else {
-      setCurrentExt(prev => (prev === 'mp4' ? 'mkv' : 'mp4'));
+      setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : prev === 'm3u8' ? 'mkv' : 'mp4'));
     }
   };
 
@@ -142,15 +145,13 @@ const PlayerPage: React.FC = () => {
       />
 
       {/* Stream format switcher pill for troubleshooting tricky IPTV feeds */}
-      {type === 'live' && (
-        <button
-          onClick={toggleStreamFormat}
-          className="absolute top-4 right-20 z-40 bg-black/50 hover:bg-black/80 text-gray-300 hover:text-white px-2.5 py-1 rounded text-xs border border-white/10 transition-colors"
-          title="Toggle stream protocol between M3U8 (HLS) and TS (MPEG-TS)"
-        >
-          Format: {currentExt.toUpperCase()}
-        </button>
-      )}
+      <button
+        onClick={toggleStreamFormat}
+        className="absolute top-4 right-20 z-40 bg-black/60 hover:bg-black/80 text-gray-300 hover:text-white px-3 py-1.5 rounded-full text-xs font-semibold border border-white/20 shadow-lg transition-all backdrop-blur-md active:scale-95"
+        title="Switch stream format (MP4, HLS/M3U8, or MKV/TS)"
+      >
+        Format: <span className="text-indigo-400 font-bold">{currentExt.toUpperCase()}</span>
+      </button>
     </div>
   );
 };
