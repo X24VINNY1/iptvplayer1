@@ -147,9 +147,18 @@ const LiveTVPage: React.FC = () => {
     if (!video) return;
 
     if (hlsRef.current) {
-      hlsRef.current.destroy();
+      try {
+        hlsRef.current.stopLoad();
+        hlsRef.current.detachMedia();
+        hlsRef.current.destroy();
+      } catch {}
       hlsRef.current = null;
     }
+    try {
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+    } catch {}
 
     const rawUrl =
       connectionType === 'm3u' && previewChannel.direct_source
@@ -165,6 +174,9 @@ const LiveTVPage: React.FC = () => {
         backBufferLength: 15,
         maxBufferSize: 30 * 1000 * 1000,
         maxBufferLength: 20,
+        xhrSetup: (xhr: XMLHttpRequest) => {
+          xhr.withCredentials = false;
+        }
       });
 
       hls.loadSource(proxiedUrl);
@@ -180,20 +192,43 @@ const LiveTVPage: React.FC = () => {
             hls.startLoad();
           } else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
             hls.recoverMediaError();
+          } else {
+            // Fatal manifest / demux error: fallback to direct native video playback
+            console.warn('[LiveTV Preview] HLS fatal error, falling back to direct video...', data.details);
+            try {
+              hls.destroy();
+            } catch {}
+            hlsRef.current = null;
+            if (video) {
+              video.src = proxiedUrl;
+              video.load();
+              video.play().catch(() => {});
+            }
           }
         }
       });
 
       hlsRef.current = hls;
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else {
       video.src = proxiedUrl;
       video.play().catch(() => {});
     }
 
     return () => {
       if (hlsRef.current) {
-        hlsRef.current.destroy();
+        try {
+          hlsRef.current.stopLoad();
+          hlsRef.current.detachMedia();
+          hlsRef.current.destroy();
+        } catch {}
         hlsRef.current = null;
+      }
+      if (video) {
+        try {
+          video.pause();
+          video.removeAttribute('src');
+          video.load();
+        } catch {}
       }
     };
   }, [previewChannel, viewMode, serverUrl, username, password, connectionType]);

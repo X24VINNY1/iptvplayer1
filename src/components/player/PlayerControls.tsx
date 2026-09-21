@@ -154,8 +154,9 @@ export default function PlayerControls({
         <div className="flex items-center gap-3 truncate max-w-[60%]">
           {onBack && (
             <button 
+              data-tv-focusable="true"
               onClick={onBack}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-white hover:text-indigo-400 transition-all bg-black/50 hover:bg-black/80 rounded-xl border border-white/10 shrink-0 active:scale-95 shadow-lg"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-white hover:text-indigo-400 transition-all bg-black/50 hover:bg-black/80 rounded-xl border border-white/10 shrink-0 active:scale-95 shadow-lg outline-none focus:ring-2 focus:ring-indigo-400"
               title="Go Back (Esc)"
             >
               <ArrowLeft className="w-4 h-4" />
@@ -186,8 +187,9 @@ export default function PlayerControls({
           {/* Channel Drawer Toggle (Live TV) */}
           {isLive && liveStreams.length > 0 && onSelectChannel && (
             <button
+              data-tv-focusable="true"
               onClick={() => setShowChannelDrawer(!showChannelDrawer)}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600/80 hover:bg-indigo-600 text-white shadow-lg transition-all active:scale-95 border border-indigo-400/30"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-indigo-600/80 hover:bg-indigo-600 text-white shadow-lg transition-all active:scale-95 border border-indigo-400/30 outline-none focus:ring-2 focus:ring-indigo-400"
               title="Quick Channels List"
             >
               <List className="w-3.5 h-3.5" />
@@ -198,8 +200,9 @@ export default function PlayerControls({
           {/* Stream Format Switcher */}
           {onToggleFormat && (
             <button
+              data-tv-focusable="true"
               onClick={onToggleFormat}
-              className="px-3 py-1.5 rounded-full text-xs font-bold bg-black/60 hover:bg-black/90 text-gray-200 hover:text-white border border-white/20 shadow-lg transition-all active:scale-95"
+              className="px-3 py-1.5 rounded-full text-xs font-bold bg-black/60 hover:bg-black/90 text-gray-200 hover:text-white border border-white/20 shadow-lg transition-all active:scale-95 outline-none focus:ring-2 focus:ring-indigo-400"
               title="Click to toggle stream container format (MP4, HLS, TS)"
             >
               Format: <span className="text-indigo-400">{currentFormat.toUpperCase()}</span>
@@ -209,8 +212,9 @@ export default function PlayerControls({
           {/* Connection Route Switcher (Proxy vs Direct) */}
           {onToggleRoute && (
             <button
+              data-tv-focusable="true"
               onClick={onToggleRoute}
-              className={`px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg transition-all active:scale-95 flex items-center gap-1.5 ${
+              className={`px-3 py-1.5 rounded-full text-xs font-bold border shadow-lg transition-all active:scale-95 flex items-center gap-1.5 outline-none focus:ring-2 focus:ring-indigo-400 ${
                 connectionMode === 'proxy'
                   ? 'bg-indigo-600/30 text-indigo-300 border-indigo-500/50 hover:bg-indigo-600/50'
                   : 'bg-emerald-600/30 text-emerald-300 border-emerald-500/50 hover:bg-emerald-600/50'
@@ -225,8 +229,9 @@ export default function PlayerControls({
           {/* Anti-Lag & Buffer Health Indicator */}
           <div className="relative">
             <button
+              data-tv-focusable="true"
               onClick={() => setShowAntiLagMenu(!showAntiLagMenu)}
-              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md outline-none focus:ring-2 focus:ring-indigo-400 ${
                 antiLagEnabled
                   ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 shadow-emerald-500/10'
                   : 'bg-gray-800/80 text-gray-400 border border-gray-700 hover:bg-gray-700'
@@ -404,8 +409,9 @@ export default function PlayerControls({
           <div className="flex items-center gap-3">
             {/* Play/Pause Button */}
             <button 
+              data-tv-focusable="true"
               onClick={handlePlayPause}
-              className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-lg shadow-indigo-600/30 active:scale-95"
+              className="w-10 h-10 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white flex items-center justify-center transition-all shadow-lg shadow-indigo-600/30 active:scale-95 outline-none focus:ring-2 focus:ring-indigo-400"
               title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             >
               {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
@@ -414,8 +420,9 @@ export default function PlayerControls({
             {/* Seek Back 10s */}
             {!isLive && (
               <button
+                data-tv-focusable="true"
                 onClick={() => handleSeekDelta(-10)}
-                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400"
                 title="Rewind 10 seconds (←)"
               >
                 <RotateCcw className="w-5 h-5" />
@@ -425,8 +432,9 @@ export default function PlayerControls({
             {/* Seek Forward 10s */}
             {!isLive && (
               <button
+                data-tv-focusable="true"
                 onClick={() => handleSeekDelta(10)}
-                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400"
                 title="Forward 10 seconds (→)"
               >
                 <RotateCw className="w-5 h-5" />
@@ -440,8 +448,9 @@ export default function PlayerControls({
               onMouseLeave={() => setShowVolume(false)}
             >
               <button 
+                data-tv-focusable="true"
                 onClick={toggleMute}
-                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+                className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400"
                 title="Mute / Unmute (M)"
               >
                 {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
@@ -481,8 +490,9 @@ export default function PlayerControls({
             {!isLive && (
               <div className="relative">
                 <button
+                  data-tv-focusable="true"
                   onClick={() => setShowSpeedMenu(!showSpeedMenu)}
-                  className="flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors"
+                  className="flex items-center gap-1 text-xs font-bold text-gray-300 hover:text-white px-2.5 py-1.5 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400"
                   title="Playback Speed"
                 >
                   <Gauge className="w-4 h-4" />
@@ -494,8 +504,9 @@ export default function PlayerControls({
                     {[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((s) => (
                       <button
                         key={s}
+                        data-tv-focusable="true"
                         onClick={() => handleSpeedChange(s)}
-                        className={`text-xs px-3 py-1 rounded-lg text-left font-semibold ${
+                        className={`text-xs px-3 py-1 rounded-lg text-left font-semibold outline-none focus:ring-2 focus:ring-indigo-400 ${
                           playbackSpeed === s ? 'bg-indigo-600 text-white' : 'text-gray-300 hover:bg-gray-800'
                         }`}
                       >
@@ -510,8 +521,9 @@ export default function PlayerControls({
             {/* Picture in Picture */}
             {document.pictureInPictureEnabled && (
               <button 
+                data-tv-focusable="true"
                 onClick={togglePiP}
-                className={`p-2 rounded-lg hover:bg-white/10 transition-colors ${isPiP ? 'text-indigo-400' : 'text-gray-300 hover:text-white'}`}
+                className={`p-2 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400 ${isPiP ? 'text-indigo-400' : 'text-gray-300 hover:text-white'}`}
                 title="Picture in Picture"
               >
                 <PictureInPicture2 className="w-5 h-5" />
@@ -520,8 +532,9 @@ export default function PlayerControls({
             
             {/* Fullscreen Toggle */}
             <button 
+              data-tv-focusable="true"
               onClick={toggleFullscreen}
-              className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors"
+              className="text-gray-300 hover:text-white p-2 rounded-lg hover:bg-white/10 transition-colors outline-none focus:ring-2 focus:ring-indigo-400"
               title="Fullscreen (F)"
             >
               {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}

@@ -207,7 +207,6 @@ export default function VideoPlayer({
         ref={videoRef}
         className="w-full h-full object-contain cursor-pointer bg-black"
         playsInline
-        crossOrigin="anonymous"
         preload="auto"
         onClick={() => {
           if (videoRef.current) {
