@@ -38,18 +38,21 @@ export default function Modal({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+    <div role="dialog" aria-modal="true" data-modal="true" className="modal-overlay fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
       <div 
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity" 
+        className="absolute inset-0 bg-black/70 backdrop-blur-sm transition-opacity" 
         onClick={onClose}
       />
-      <div className={`relative w-full ${sizeClasses[size]} bg-gray-900 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all transform scale-100 opacity-100`}>
+      <div className={`modal-content relative w-full ${sizeClasses[size]} bg-gray-900 border border-gray-800 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] transition-all transform scale-100 opacity-100`}>
         {(
           <div className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
-            {title && <h2 className="text-lg font-semibold text-white">{title}</h2>}
+            {title && <h2 className="text-lg font-bold text-white tracking-tight">{title}</h2>}
             <button
               onClick={onClose}
-              className="p-2 -mr-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-full transition-colors ml-auto"
+              data-modal-close="true"
+              data-tv-focusable="true"
+              className="p-2 -mr-2 text-gray-400 hover:text-white hover:bg-gray-800 rounded-xl transition-all ml-auto outline-none focus:ring-4 focus:ring-indigo-400 focus:bg-gray-800"
+              title="Close (Back)"
             >
               <X className="w-5 h-5" />
             </button>
@@ -62,4 +65,5 @@ export default function Modal({
     </div>,
     document.body
   );
+
 }

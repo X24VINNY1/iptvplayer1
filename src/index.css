@@ -29,7 +29,7 @@
     @apply bg-gray-600;
   }
 
-  /* TV Remote D-pad focus enhancement */
+  /* TV Remote D-pad focus enhancement - 10-foot UI ergonomics */
   .tv-focused:not(input):not(textarea),
   button:focus,
   a:focus,
@@ -37,10 +37,11 @@
   [tabindex="0"]:not(input):not(textarea):focus,
   .card-hover:focus {
     outline: none !important;
-    box-shadow: 0 0 0 3.5px #6366f1, 0 0 25px rgba(99, 102, 241, 0.75) !important;
-    transform: scale(1.04) !important;
-    transition: transform 0.15s ease-out, box-shadow 0.15s ease-out !important;
-    z-index: 30 !important;
+    border-color: #818cf8 !important;
+    box-shadow: 0 0 0 4px #818cf8, 0 0 35px rgba(129, 140, 248, 0.9) !important;
+    transform: scale(1.06) !important;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
+    z-index: 40 !important;
     position: relative;
   }
 
@@ -50,11 +51,14 @@
   textarea.tv-focused {
     outline: none !important;
     border-color: #818cf8 !important;
-    box-shadow: 0 0 0 3.5px #6366f1, 0 0 20px rgba(99, 102, 241, 0.6) !important;
+    box-shadow: 0 0 0 4px #818cf8, 0 0 25px rgba(129, 140, 248, 0.75) !important;
     background-color: #1e1b4b !important;
-    z-index: 30 !important;
+    z-index: 40 !important;
     position: relative;
+    transform: scale(1.02) !important;
+    transition: transform 0.12s cubic-bezier(0.2, 0, 0, 1), box-shadow 0.12s cubic-bezier(0.2, 0, 0, 1) !important;
   }
+
 
   /* Android TV Hardware Acceleration & 60fps Scrolling */
   .content-grid,
