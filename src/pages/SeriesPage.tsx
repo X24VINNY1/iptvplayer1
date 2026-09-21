@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
@@ -40,6 +40,11 @@ const SeriesPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'cinematic' | 'grid'>('cinematic');
   const [focusedSeries, setFocusedSeries] = useState<Series | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+
+  // Performance: Windowed chunk rendering to prevent Android TV crashing on 5,000+ series
+  const [visibleCount, setVisibleCount] = useState(48);
+  const [activeSeriesId, setActiveSeriesId] = useState<number | null>(null);
+  const focusSeriesTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   useTVRemote();
 
@@ -84,14 +89,57 @@ const SeriesPage: React.FC = () => {
     return list;
   }, [seriesList, seriesCategories, selectedCategory, searchQuery, isCategoryHidden]);
 
+  // Reset pagination on filter or category change
+  useEffect(() => {
+    setVisibleCount(48);
+  }, [selectedCategory, searchQuery]);
+
+  const displayedSeries = useMemo(() => {
+    return filteredSeries.slice(0, visibleCount);
+  }, [filteredSeries, visibleCount]);
+
   // Default focused series
   useEffect(() => {
     if (!focusedSeries && filteredSeries.length > 0) {
       setFocusedSeries(filteredSeries[0]);
+      setActiveSeriesId(filteredSeries[0].series_id);
     } else if (focusedSeries && !filteredSeries.find((s) => s.series_id === focusedSeries.series_id)) {
       setFocusedSeries(filteredSeries[0] || null);
+      setActiveSeriesId(filteredSeries[0]?.series_id || null);
     }
   }, [filteredSeries, focusedSeries]);
+
+  // Debounce backdrop change so fast remote scrolling doesn't thrash image memory
+  const handleSeriesFocus = (series: Series, index: number) => {
+    setActiveSeriesId(series.series_id);
+
+    // Auto-expand next chunk as remote approaches bottom
+    if (index >= displayedSeries.length - 8 && visibleCount < filteredSeries.length) {
+      setVisibleCount((prev) => Math.min(prev + 48, filteredSeries.length));
+    }
+
+    if (focusSeriesTimerRef.current) {
+      clearTimeout(focusSeriesTimerRef.current);
+    }
+    focusSeriesTimerRef.current = setTimeout(() => {
+      setFocusedSeries(series);
+    }, 250);
+  };
+
+  const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 400 && visibleCount < filteredSeries.length) {
+      setVisibleCount((prev) => Math.min(prev + 48, filteredSeries.length));
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (focusSeriesTimerRef.current) {
+        clearTimeout(focusSeriesTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleSeriesClick = (series: Series) => {
     navigate(`/series/${series.series_id}`);
@@ -264,15 +312,15 @@ const SeriesPage: React.FC = () => {
           ) : null}
 
           {/* Bottom Series Poster Strip */}
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-16">
-              {filteredSeries.map((series) => {
-                const isFocused = focusedSeries?.series_id === series.series_id;
+          <div onScroll={handleListScroll} className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-8">
+              {displayedSeries.map((series, index) => {
+                const isFocused = (activeSeriesId || focusedSeries?.series_id) === series.series_id;
                 return (
                   <div
                     key={series.series_id}
-                    onFocus={() => setFocusedSeries(series)}
-                    onMouseEnter={() => setFocusedSeries(series)}
+                    onFocus={() => handleSeriesFocus(series, index)}
+                    onMouseEnter={() => handleSeriesFocus(series, index)}
                     onClick={() => {
                       setFocusedSeries(series);
                       handleSeriesClick(series);
@@ -286,11 +334,25 @@ const SeriesPage: React.FC = () => {
                 );
               })}
             </div>
+
+            {visibleCount < filteredSeries.length && (
+              <div className="pb-16 text-center">
+                <button
+                  type="button"
+                  data-tv-focusable="true"
+                  data-tv-section="content"
+                  onClick={() => setVisibleCount((prev) => Math.min(prev + 48, filteredSeries.length))}
+                  className="px-6 py-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-500 shadow-lg"
+                >
+                  Load More Series ({visibleCount} of {filteredSeries.length})
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
         /* Classic Grid Mode */
-        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+        <div onScroll={handleListScroll} className="flex-1 overflow-y-auto p-6 scrollbar-hide">
           {filteredSeries.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center">
               <p className="text-base font-medium mb-2">No series found in this view.</p>
@@ -302,15 +364,39 @@ const SeriesPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
-              {filteredSeries.map((series) => (
-                <SeriesCard
-                  key={series.series_id}
-                  series={series}
-                  onClick={() => handleSeriesClick(series)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+                {displayedSeries.map((series, index) => (
+                  <div
+                    key={series.series_id}
+                    onFocus={() => {
+                      if (index >= displayedSeries.length - 8 && visibleCount < filteredSeries.length) {
+                        setVisibleCount((prev) => Math.min(prev + 48, filteredSeries.length));
+                      }
+                    }}
+                  >
+                    <SeriesCard
+                      series={series}
+                      onClick={() => handleSeriesClick(series)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {visibleCount < filteredSeries.length && (
+                <div className="pb-16 text-center">
+                  <button
+                    type="button"
+                    data-tv-focusable="true"
+                    data-tv-section="content"
+                    onClick={() => setVisibleCount((prev) => Math.min(prev + 48, filteredSeries.length))}
+                    className="px-6 py-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-500 shadow-lg"
+                  >
+                    Load More Series ({visibleCount} of {filteredSeries.length})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

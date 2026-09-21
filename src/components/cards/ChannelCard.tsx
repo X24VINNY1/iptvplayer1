@@ -31,6 +31,8 @@ const ChannelCard = React.memo(function ChannelCard({ channel, epgTitle, onClick
           <img 
             src={channel.stream_icon} 
             alt={channel.name}
+            loading="lazy"
+            decoding="async"
             onError={() => setImgError(true)}
             className="w-12 h-12 rounded-lg object-contain bg-gray-800"
           />

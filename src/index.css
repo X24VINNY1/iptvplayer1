@@ -55,6 +55,19 @@
     z-index: 30 !important;
     position: relative;
   }
+
+  /* Android TV Hardware Acceleration & 60fps Scrolling */
+  .content-grid,
+  .channel-grid,
+  [data-tv-section="content"],
+  video {
+    transform: translateZ(0);
+    backface-visibility: hidden;
+  }
+
+  img {
+    content-visibility: auto;
+  }
 }
 
 @layer components {

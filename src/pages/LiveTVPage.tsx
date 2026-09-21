@@ -91,12 +91,53 @@ const LiveTVPage: React.FC = () => {
     return streams;
   }, [liveStreams, liveCategories, selectedCategory, channelSearch, isCategoryHidden]);
 
+  // Performance: Windowed chunk rendering to prevent Android TV DOM freezing
+  const [visibleCount, setVisibleCount] = useState(50);
+  const [focusedChannelId, setFocusedChannelId] = useState<number | null>(null);
+  const previewTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset windowing pagination when filters change
+  useEffect(() => {
+    setVisibleCount(50);
+  }, [selectedCategory, channelSearch]);
+
+  const displayedStreams = useMemo(() => {
+    return filteredStreams.slice(0, visibleCount);
+  }, [filteredStreams, visibleCount]);
+
   // Default preview channel to first item if null
   useEffect(() => {
     if (!previewChannel && filteredStreams.length > 0) {
       setPreviewChannel(filteredStreams[0]);
+      setFocusedChannelId(filteredStreams[0].stream_id);
     }
   }, [filteredStreams, previewChannel]);
+
+  // Debounced preview channel focus handler - prevents crashing Android hardware video decoders on fast scroll
+  const handleChannelFocus = (channel: LiveStream, index: number) => {
+    setFocusedChannelId(channel.stream_id);
+
+    // Auto-expand next chunk as remote D-pad approaches bottom
+    if (index >= displayedStreams.length - 8 && visibleCount < filteredStreams.length) {
+      setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length));
+    }
+
+    if (previewTimerRef.current) {
+      clearTimeout(previewTimerRef.current);
+    }
+
+    // 450ms debounce: only allocate video decoders when user pauses on a channel
+    previewTimerRef.current = setTimeout(() => {
+      setPreviewChannel(channel);
+    }, 450);
+  };
+
+  const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 350 && visibleCount < filteredStreams.length) {
+      setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length));
+    }
+  };
 
   // Preview Player HLS Lifecycle
   useEffect(() => {
@@ -121,7 +162,9 @@ const LiveTVPage: React.FC = () => {
       const hls = new Hls({
         enableWorker: true,
         lowLatencyMode: true,
-        backBufferLength: 30,
+        backBufferLength: 15,
+        maxBufferSize: 30 * 1000 * 1000,
+        maxBufferLength: 20,
       });
 
       hls.loadSource(proxiedUrl);
@@ -154,6 +197,15 @@ const LiveTVPage: React.FC = () => {
       }
     };
   }, [previewChannel, viewMode, serverUrl, username, password, connectionType]);
+
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (previewTimerRef.current) {
+        clearTimeout(previewTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleChannelClick = (channel: LiveStream) => {
     launchFullscreen(channel);
@@ -303,69 +355,90 @@ const LiveTVPage: React.FC = () => {
             </div>
 
             {/* Channels List */}
-            <div className="flex-1 overflow-y-auto divide-y divide-gray-800/40 scrollbar-thin">
-              {filteredStreams.length === 0 ? (
+            <div 
+              onScroll={handleListScroll}
+              className="flex-1 overflow-y-auto divide-y divide-gray-800/40 scrollbar-thin"
+            >
+              {displayedStreams.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-xs">No channels in this view.</div>
               ) : (
-                filteredStreams.map((channel) => {
-                  const isSelected = previewChannel?.stream_id === channel.stream_id;
-                  return (
-                    <div
-                      key={channel.stream_id}
-                      tabIndex={0}
-                      role="button"
-                      data-tv-focusable="true"
-                      data-tv-section="content"
-                      onFocus={() => setPreviewChannel(channel)}
-                      onMouseEnter={() => setPreviewChannel(channel)}
-                      onClick={() => handleChannelClick(channel)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
-                          e.preventDefault();
-                          handleChannelClick(channel);
-                        }
-                      }}
-                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all outline-none ${
-                        isSelected
-                          ? 'bg-indigo-600/30 border-l-4 border-indigo-500 text-white shadow-inner ring-2 ring-indigo-500/50'
-                          : 'hover:bg-gray-900/60 text-gray-300'
-                      } focus:ring-4 focus:ring-indigo-500 focus:bg-indigo-600/40 focus:text-white focus:z-10`}
-                    >
-                      {channel.stream_icon ? (
-                        <img
-                          src={channel.stream_icon}
-                          alt=""
-                          className="w-9 h-9 rounded-lg object-contain bg-black/40 flex-shrink-0 p-0.5 border border-gray-800"
-                          onError={(e) => {
-                            (e.target as HTMLElement).style.display = 'none';
-                          }}
-                        />
-                      ) : (
-                        <div className="w-9 h-9 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center flex-shrink-0">
-                          <Radio className="w-4 h-4 text-gray-500" />
-                        </div>
-                      )}
-
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold truncate leading-snug">{channel.name}</p>
-                        <p className="text-[11px] text-gray-500 truncate mt-0.5">
-                          CH {channel.num || channel.stream_id}
-                        </p>
-                      </div>
-
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          launchFullscreen(channel);
+                <>
+                  {displayedStreams.map((channel, index) => {
+                    const isSelected = focusedChannelId === channel.stream_id || previewChannel?.stream_id === channel.stream_id;
+                    return (
+                      <div
+                        key={channel.stream_id}
+                        tabIndex={0}
+                        role="button"
+                        data-tv-focusable="true"
+                        data-tv-section="content"
+                        onFocus={() => handleChannelFocus(channel, index)}
+                        onMouseEnter={() => handleChannelFocus(channel, index)}
+                        onClick={() => handleChannelClick(channel)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+                            e.preventDefault();
+                            handleChannelClick(channel);
+                          }
                         }}
-                        className="p-1.5 rounded-lg bg-gray-800/60 hover:bg-indigo-600 hover:text-white text-gray-400 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Play Fullscreen"
+                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all outline-none ${
+                          isSelected
+                            ? 'bg-indigo-600/30 border-l-4 border-indigo-500 text-white shadow-inner ring-2 ring-indigo-500/50'
+                            : 'hover:bg-gray-900/60 text-gray-300'
+                        } focus:ring-4 focus:ring-indigo-500 focus:bg-indigo-600/40 focus:text-white focus:z-10`}
                       >
-                        <Play className="w-3.5 h-3.5 fill-current" />
+                        {channel.stream_icon ? (
+                          <img
+                            src={channel.stream_icon}
+                            alt=""
+                            loading="lazy"
+                            decoding="async"
+                            className="w-9 h-9 rounded-lg object-contain bg-black/40 flex-shrink-0 p-0.5 border border-gray-800"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        ) : (
+                          <div className="w-9 h-9 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center flex-shrink-0">
+                            <Radio className="w-4 h-4 text-gray-500" />
+                          </div>
+                        )}
+
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold truncate leading-snug">{channel.name}</p>
+                          <p className="text-[11px] text-gray-500 truncate mt-0.5">
+                            CH {channel.num || channel.stream_id}
+                          </p>
+                        </div>
+
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            launchFullscreen(channel);
+                          }}
+                          className="p-1.5 rounded-lg bg-gray-800/60 hover:bg-indigo-600 hover:text-white text-gray-400 opacity-0 group-hover:opacity-100 transition-all"
+                          title="Play Fullscreen"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-current" />
+                        </button>
+                      </div>
+                    );
+                  })}
+
+                  {visibleCount < filteredStreams.length && (
+                    <div className="p-4 text-center">
+                      <button
+                        type="button"
+                        data-tv-focusable="true"
+                        data-tv-section="content"
+                        onClick={() => setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length))}
+                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-2 focus:ring-indigo-500"
+                      >
+                        Load More Channels ({visibleCount} of {filteredStreams.length})
                       </button>
                     </div>
-                  );
-                })
+                  )}
+                </>
               )}
             </div>
           </div>
@@ -505,15 +578,39 @@ const LiveTVPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
-              {filteredStreams.map((channel) => (
-                <ChannelCard
-                  key={channel.stream_id}
-                  channel={channel}
-                  onClick={() => handleChannelClick(channel)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+                {displayedStreams.map((channel, index) => (
+                  <div
+                    key={channel.stream_id}
+                    onFocus={() => {
+                      if (index >= displayedStreams.length - 8 && visibleCount < filteredStreams.length) {
+                        setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length));
+                      }
+                    }}
+                  >
+                    <ChannelCard
+                      channel={channel}
+                      onClick={() => handleChannelClick(channel)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {visibleCount < filteredStreams.length && (
+                <div className="pb-16 text-center">
+                  <button
+                    type="button"
+                    data-tv-focusable="true"
+                    data-tv-section="content"
+                    onClick={() => setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length))}
+                    className="px-6 py-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-500 shadow-lg"
+                  >
+                    Load More Channels ({visibleCount} of {filteredStreams.length})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

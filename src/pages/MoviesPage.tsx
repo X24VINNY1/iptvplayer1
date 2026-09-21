@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
@@ -90,14 +90,62 @@ const MoviesPage: React.FC = () => {
     return movies;
   }, [vodStreams, vodCategories, selectedCategory, movieSearch, isCategoryHidden]);
 
+  // Performance: Windowed chunk rendering to prevent Android TV crashing on 10,000+ movies
+  const [visibleCount, setVisibleCount] = useState(48);
+  const [activeMovieId, setActiveMovieId] = useState<number | null>(null);
+  const focusMovieTimerRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset pagination on filter or category change
+  useEffect(() => {
+    setVisibleCount(48);
+  }, [selectedCategory, movieSearch]);
+
+  const displayedMovies = useMemo(() => {
+    return filteredMovies.slice(0, visibleCount);
+  }, [filteredMovies, visibleCount]);
+
   // Default focused movie to first in list
   useEffect(() => {
     if (!focusedMovie && filteredMovies.length > 0) {
       setFocusedMovie(filteredMovies[0]);
+      setActiveMovieId(filteredMovies[0].stream_id);
     } else if (focusedMovie && !filteredMovies.find((m) => m.stream_id === focusedMovie.stream_id)) {
       setFocusedMovie(filteredMovies[0] || null);
+      setActiveMovieId(filteredMovies[0]?.stream_id || null);
     }
   }, [filteredMovies, focusedMovie]);
+
+  // Debounce backdrop change so fast remote scrolling doesn't thrash image memory
+  const handleMovieFocus = (movie: VodStream, index: number) => {
+    setActiveMovieId(movie.stream_id);
+
+    // Auto-expand next chunk as remote approaches bottom
+    if (index >= displayedMovies.length - 8 && visibleCount < filteredMovies.length) {
+      setVisibleCount((prev) => Math.min(prev + 48, filteredMovies.length));
+    }
+
+    if (focusMovieTimerRef.current) {
+      clearTimeout(focusMovieTimerRef.current);
+    }
+    focusMovieTimerRef.current = setTimeout(() => {
+      setFocusedMovie(movie);
+    }, 250);
+  };
+
+  const handleListScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    if (scrollHeight - scrollTop - clientHeight < 400 && visibleCount < filteredMovies.length) {
+      setVisibleCount((prev) => Math.min(prev + 48, filteredMovies.length));
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (focusMovieTimerRef.current) {
+        clearTimeout(focusMovieTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleMovieClick = async (movie: VodStream) => {
     setSelectedMovie(movie);
@@ -309,15 +357,15 @@ const MoviesPage: React.FC = () => {
           ) : null}
 
           {/* Bottom Movie Poster Strip / Grid */}
-          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-16">
-              {filteredMovies.map((movie) => {
-                const isFocused = focusedMovie?.stream_id === movie.stream_id;
+          <div onScroll={handleListScroll} className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-8">
+              {displayedMovies.map((movie, index) => {
+                const isFocused = (activeMovieId || focusedMovie?.stream_id) === movie.stream_id;
                 return (
                   <div
                     key={movie.stream_id}
-                    onFocus={() => setFocusedMovie(movie)}
-                    onMouseEnter={() => setFocusedMovie(movie)}
+                    onFocus={() => handleMovieFocus(movie, index)}
+                    onMouseEnter={() => handleMovieFocus(movie, index)}
                     onClick={() => handlePlay(movie)}
                     className={`transition-all transform duration-200 ${
                       isFocused ? 'scale-105 z-10' : 'opacity-90 hover:opacity-100'
@@ -328,11 +376,25 @@ const MoviesPage: React.FC = () => {
                 );
               })}
             </div>
+
+            {visibleCount < filteredMovies.length && (
+              <div className="pb-16 text-center">
+                <button
+                  type="button"
+                  data-tv-focusable="true"
+                  data-tv-section="content"
+                  onClick={() => setVisibleCount((prev) => Math.min(prev + 48, filteredMovies.length))}
+                  className="px-6 py-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-500 shadow-lg"
+                >
+                  Load More Movies ({visibleCount} of {filteredMovies.length})
+                </button>
+              </div>
+            )}
           </div>
         </div>
       ) : (
         /* Classic Grid Mode */
-        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+        <div onScroll={handleListScroll} className="flex-1 overflow-y-auto p-6 scrollbar-hide">
           {filteredMovies.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center">
               <p className="text-base font-medium mb-2">No movies found in this view.</p>
@@ -344,15 +406,39 @@ const MoviesPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
-              {filteredMovies.map((movie) => (
-                <MovieCard
-                  key={movie.stream_id}
-                  movie={movie}
-                  onClick={() => handlePlay(movie)}
-                />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-8">
+                {displayedMovies.map((movie, index) => (
+                  <div
+                    key={movie.stream_id}
+                    onFocus={() => {
+                      if (index >= displayedMovies.length - 8 && visibleCount < filteredMovies.length) {
+                        setVisibleCount((prev) => Math.min(prev + 48, filteredMovies.length));
+                      }
+                    }}
+                  >
+                    <MovieCard
+                      movie={movie}
+                      onClick={() => handlePlay(movie)}
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {visibleCount < filteredMovies.length && (
+                <div className="pb-16 text-center">
+                  <button
+                    type="button"
+                    data-tv-focusable="true"
+                    data-tv-section="content"
+                    onClick={() => setVisibleCount((prev) => Math.min(prev + 48, filteredMovies.length))}
+                    className="px-6 py-3 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-500 shadow-lg"
+                  >
+                    Load More Movies ({visibleCount} of {filteredMovies.length})
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

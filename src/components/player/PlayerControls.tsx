@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
   ArrowLeft, PictureInPicture2, RotateCcw, RotateCw, 
@@ -139,10 +139,13 @@ export default function PlayerControls({
 
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
-  // Filter channels for quick side-drawer
-  const filteredChannels = liveStreams.filter((ch) =>
-    ch.name.toLowerCase().includes(channelSearch.toLowerCase())
-  );
+  // Filter channels for quick side-drawer - ONLY compute when drawer is open and capped to 50
+  const filteredChannels = useMemo(() => {
+    if (!showChannelDrawer) return [];
+    const q = channelSearch.trim().toLowerCase();
+    if (!q) return liveStreams.slice(0, 50);
+    return liveStreams.filter((ch) => ch.name.toLowerCase().includes(q)).slice(0, 50);
+  }, [showChannelDrawer, channelSearch, liveStreams]);
 
   return (
     <div className="absolute inset-0 flex flex-col justify-between select-none pointer-events-none">

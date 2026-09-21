@@ -30,6 +30,8 @@ const SeriesCard = React.memo(function SeriesCard({ series, onClick }: SeriesCar
         <img 
           src={series.cover} 
           alt={series.name}
+          loading="lazy"
+          decoding="async"
           onError={() => setImgError(true)}
           className="w-full h-full object-cover"
         />

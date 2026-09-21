@@ -30,6 +30,8 @@ const MovieCard = React.memo(function MovieCard({ movie, onClick }: MovieCardPro
         <img 
           src={movie.stream_icon} 
           alt={movie.name}
+          loading="lazy"
+          decoding="async"
           onError={() => setImgError(true)}
           className="w-full h-full object-cover"
         />
