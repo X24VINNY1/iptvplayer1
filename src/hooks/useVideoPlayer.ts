@@ -29,6 +29,7 @@ export function useVideoPlayer(
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const mediaRecoveriesRef = useRef<number>(0);
   const fallbackCountRef = useRef<number>(0);
+  const networkErrorRetriesRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
   const blobUrlRef = useRef<string | null>(null);
@@ -120,6 +121,7 @@ export function useVideoPlayer(
     stallCounterRef.current = 0;
     lastTimeRef.current = 0;
     mediaRecoveriesRef.current = 0;
+    networkErrorRetriesRef.current = 0;
 
     video.volume = volume;
     video.muted = isMuted;
@@ -208,19 +210,15 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
-    // Proxy routing: Only proxy HLS (.m3u8) streams where manifest/segment text is parsed by JS.
-    // NEVER send direct multi-gigabyte VOD movie files (MP4/MKV) through public CORS proxies because of size limits!
+    // Source resolution: Play directly from server by default.
+    // If the user explicitly activates Cloud Proxy for testing on Web, route through cors.eu.org
     let effectiveSrc = src;
-    const isNative = Capacitor.isNativePlatform();
-    const isHttpsWeb = typeof window !== 'undefined' && window.location.protocol === 'https:';
-    const isHttpStream = src.startsWith('http://');
-
     const isHlsUrl =
       src.includes('.m3u8') ||
       (type === 'live' && !src.endsWith('.mp4'));
 
-    if (isHlsUrl && (useProxy || (!isNative && isHttpsWeb && isHttpStream))) {
-      effectiveSrc = `https://corsproxy.io/?url=${encodeURIComponent(src)}`;
+    if (useProxy && isHlsUrl) {
+      effectiveSrc = `https://cors.eu.org/${src}`;
     }
 
     const isRawTs = effectiveSrc.endsWith('.ts') || effectiveSrc.includes('.ts?') || effectiveSrc.includes('/live/');
@@ -247,6 +245,7 @@ export function useVideoPlayer(
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
         setIsLoading(false);
         fallbackCountRef.current = 0;
+        networkErrorRetriesRef.current = 0;
         if (autoPlay) {
           video.play().catch((err) => {
             console.warn('Autoplay prevented:', err.message);
@@ -266,8 +265,20 @@ export function useVideoPlayer(
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[Anti-Lag] Network error, restarting HLS loader...');
-              hls.startLoad();
+              networkErrorRetriesRef.current += 1;
+              if (networkErrorRetriesRef.current <= 3) {
+                console.log(`[Anti-Lag] Network error, restarting HLS loader (attempt ${networkErrorRetriesRef.current}/3)...`);
+                hls.startLoad();
+              } else {
+                console.warn('[Anti-Lag] Network error: max retries reached.');
+                if (onFormatFallback && fallbackCountRef.current < 2) {
+                  fallbackCountRef.current += 1;
+                  onFormatFallback();
+                } else {
+                  setError('Stream connection error: Server did not respond. Check your stream URL or server status.');
+                  setIsLoading(false);
+                }
+              }
               break;
 
             case Hls.ErrorTypes.MEDIA_ERROR:
@@ -287,6 +298,7 @@ export function useVideoPlayer(
                   onFormatFallback();
                 } else {
                   setError('Media format error: Decoder encountered unsupported stream codec.');
+                  setIsLoading(false);
                 }
               }
               break;
@@ -298,6 +310,7 @@ export function useVideoPlayer(
                 onFormatFallback();
               } else {
                 setError(`Playback Error: ${data.details}`);
+                setIsLoading(false);
               }
               break;
           }

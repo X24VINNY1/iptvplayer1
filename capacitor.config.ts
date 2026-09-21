@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'OnyxStream',
   webDir: 'dist',
   server: {
-    androidScheme: 'https',
+    androidScheme: 'http',
     cleartext: true
   }
 };

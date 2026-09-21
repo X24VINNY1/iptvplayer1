@@ -35,8 +35,13 @@ const App = () => {
           <Route path="/favorites" element={<FavoritesPage />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/settings" element={<SettingsPage />} />
-          <Route path="/player/:type/:streamId" element={<PlayerPage />} />
         </Route>
+
+        {/* Fullscreen Video Player Route - completely decoupled from sidebar/header layout */}
+        <Route 
+          path="/player/:type/:streamId" 
+          element={isAuthenticated ? <PlayerPage /> : <Navigate to="/login" replace />} 
+        />
 
         <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
       </Routes>
