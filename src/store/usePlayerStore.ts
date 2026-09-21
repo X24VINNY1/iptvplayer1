@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 
+export type AntiLagMode = 'smooth' | 'balanced' | 'low-latency';
+
 interface PlayerState {
   isPlaying: boolean;
   currentTime: number;
@@ -12,6 +14,12 @@ interface PlayerState {
   error: string | null;
   reconnectAttempts: number;
 
+  // Anti-Lag & Buffer Health
+  antiLagEnabled: boolean;
+  antiLagMode: AntiLagMode;
+  bufferLength: number; // Seconds buffered ahead
+  lagRecoveries: number; // Count of auto-stalls bypassed
+
   setIsPlaying: (playing: boolean) => void;
   setCurrentTime: (time: number) => void;
   setDuration: (duration: number) => void;
@@ -21,6 +29,11 @@ interface PlayerState {
   setIsPiP: (pip: boolean) => void;
   setIsLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
+
+  setAntiLagEnabled: (enabled: boolean) => void;
+  setAntiLagMode: (mode: AntiLagMode) => void;
+  setBufferLength: (secs: number) => void;
+  incrementLagRecovery: () => void;
   
   toggleMute: () => void;
   incrementReconnect: () => void;
@@ -39,6 +52,10 @@ const initialState = {
   isLoading: true,
   error: null,
   reconnectAttempts: 0,
+  antiLagEnabled: true,
+  antiLagMode: 'smooth' as AntiLagMode,
+  bufferLength: 0,
+  lagRecoveries: 0,
 };
 
 export const usePlayerStore = create<PlayerState>((set) => ({
@@ -54,8 +71,17 @@ export const usePlayerStore = create<PlayerState>((set) => ({
   setIsLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
+  setAntiLagEnabled: (antiLagEnabled) => set({ antiLagEnabled }),
+  setAntiLagMode: (antiLagMode) => set({ antiLagMode }),
+  setBufferLength: (bufferLength) => set({ bufferLength }),
+  incrementLagRecovery: () => set((state) => ({ lagRecoveries: state.lagRecoveries + 1 })),
+
   toggleMute: () => set((state) => ({ isMuted: !state.isMuted })),
   incrementReconnect: () => set((state) => ({ reconnectAttempts: state.reconnectAttempts + 1 })),
   resetReconnect: () => set({ reconnectAttempts: 0 }),
-  reset: () => set(initialState),
+  reset: () => set((state) => ({
+    ...initialState,
+    antiLagEnabled: state.antiLagEnabled,
+    antiLagMode: state.antiLagMode
+  })),
 }));

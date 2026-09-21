@@ -1,18 +1,25 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef } from 'react';
 import { 
   Play, Pause, Volume2, VolumeX, Maximize, Minimize, 
-  ArrowLeft, PictureInPicture2, Subtitles
+  ArrowLeft, PictureInPicture2, Subtitles, ShieldCheck, Zap, RefreshCw, ChevronDown
 } from 'lucide-react';
-import { usePlayerStore } from '@/store/usePlayerStore';
+import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
 
 interface PlayerControlsProps {
   videoRef: React.RefObject<HTMLVideoElement>;
   isLive?: boolean;
   title?: string;
   onBack?: () => void;
+  onFlushAndResync?: () => void;
 }
 
-export default function PlayerControls({ videoRef, isLive, title, onBack }: PlayerControlsProps) {
+export default function PlayerControls({
+  videoRef,
+  isLive,
+  title,
+  onBack,
+  onFlushAndResync
+}: PlayerControlsProps) {
   const { 
     isPlaying, 
     currentTime, 
@@ -20,10 +27,17 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
     volume, 
     isMuted, 
     isFullscreen,
-    isPiP
+    isPiP,
+    antiLagEnabled,
+    antiLagMode,
+    bufferLength,
+    lagRecoveries,
+    setAntiLagEnabled,
+    setAntiLagMode
   } = usePlayerStore();
   
   const [showVolume, setShowVolume] = useState(false);
+  const [showAntiLagMenu, setShowAntiLagMenu] = useState(false);
   const progressRef = useRef<HTMLDivElement>(null);
 
   const formatTime = (timeInSeconds: number) => {
@@ -38,7 +52,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
   const handlePlayPause = () => {
     if (!videoRef.current) return;
     if (videoRef.current.paused) {
-      videoRef.current.play();
+      videoRef.current.play().catch(console.warn);
     } else {
       videoRef.current.pause();
     }
@@ -89,27 +103,130 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
   const progressPercent = duration > 0 ? (currentTime / duration) * 100 : 0;
 
   return (
-    <div className="absolute inset-0 flex flex-col justify-between">
+    <div className="absolute inset-0 flex flex-col justify-between select-none">
       {/* Top Bar */}
-      <div className="w-full bg-gradient-to-b from-black/80 to-transparent p-4 flex items-center gap-4">
-        {onBack && (
-          <button 
-            onClick={onBack}
-            className="p-2 text-white hover:text-indigo-400 transition-colors bg-black/20 hover:bg-black/40 rounded-full"
-          >
-            <ArrowLeft className="w-6 h-6" />
-          </button>
-        )}
-        {title && (
-          <h2 className="text-white text-lg font-medium truncate drop-shadow-md">
-            {title}
-          </h2>
-        )}
+      <div className="w-full bg-gradient-to-b from-black/80 to-transparent p-4 flex items-center justify-between">
+        <div className="flex items-center gap-4 truncate">
+          {onBack && (
+            <button 
+              onClick={onBack}
+              className="p-2 text-white hover:text-indigo-400 transition-colors bg-black/40 hover:bg-black/60 rounded-full shrink-0"
+              title="Back (Esc)"
+            >
+              <ArrowLeft className="w-6 h-6" />
+            </button>
+          )}
+          {title && (
+            <h2 className="text-white text-lg font-semibold truncate drop-shadow-md">
+              {title}
+            </h2>
+          )}
+        </div>
+
+        {/* Top Right Quick Badges */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Anti-Lag Shield Toggle Button */}
+          <div className="relative">
+            <button
+              onClick={() => setShowAntiLagMenu(!showAntiLagMenu)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-all shadow-md ${
+                antiLagEnabled
+                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-500/30 shadow-emerald-500/10'
+                  : 'bg-gray-800/80 text-gray-400 border border-gray-700 hover:bg-gray-700'
+              }`}
+              title="Anti-Lag & Buffer Health Engine"
+            >
+              <ShieldCheck className="w-4 h-4 text-emerald-400" />
+              <span>Anti-Lag: {antiLagEnabled ? 'ON' : 'OFF'}</span>
+              {bufferLength > 0 && (
+                <span className="ml-1 text-[10px] opacity-80 font-normal">
+                  ({bufferLength}s)
+                </span>
+              )}
+              <ChevronDown className="w-3 h-3 ml-0.5" />
+            </button>
+
+            {/* Anti-Lag Flyout Popover */}
+            {showAntiLagMenu && (
+              <div 
+                className="absolute right-0 top-10 w-72 bg-gray-900/95 backdrop-blur-xl border border-gray-800 rounded-2xl p-4 shadow-2xl z-50 text-white flex flex-col gap-3"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex items-center justify-between border-b border-gray-800 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-400" />
+                    <span className="text-sm font-bold">Anti-Lag Engine</span>
+                  </div>
+                  <label className="relative inline-flex items-center cursor-pointer">
+                    <input 
+                      type="checkbox" 
+                      checked={antiLagEnabled} 
+                      onChange={(e) => setAntiLagEnabled(e.target.checked)}
+                      className="sr-only peer"
+                    />
+                    <div className="w-9 h-5 bg-gray-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-600"></div>
+                  </label>
+                </div>
+
+                {/* Buffer Mode Selector */}
+                <div>
+                  <span className="text-xs text-gray-400 block mb-1.5 font-medium">Stream Buffer Profile:</span>
+                  <div className="grid grid-cols-3 gap-1 bg-gray-800/60 p-1 rounded-xl">
+                    {(['smooth', 'balanced', 'low-latency'] as AntiLagMode[]).map((mode) => (
+                      <button
+                        key={mode}
+                        onClick={() => setAntiLagMode(mode)}
+                        className={`py-1.5 px-2 rounded-lg text-[11px] font-semibold capitalize transition-all ${
+                          antiLagMode === mode
+                            ? 'bg-indigo-600 text-white shadow'
+                            : 'text-gray-400 hover:text-white'
+                        }`}
+                      >
+                        {mode === 'smooth' ? 'Smooth' : mode === 'balanced' ? 'Balanced' : 'Realtime'}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] text-gray-500 mt-1">
+                    {antiLagMode === 'smooth' && 'Deep 45s buffer to completely stop freezing on fluctuating Wi-Fi.'}
+                    {antiLagMode === 'balanced' && 'Standard buffer balancing live delay and smooth playback.'}
+                    {antiLagMode === 'low-latency' && 'Pushes close to real-time live edge (requires fast internet).'}
+                  </p>
+                </div>
+
+                {/* Live Stats */}
+                <div className="bg-gray-800/40 p-2.5 rounded-xl border border-gray-700/40 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-gray-400 block text-[10px]">Buffer Ahead</span>
+                    <span className="font-bold text-emerald-400">{bufferLength} seconds</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-gray-400 block text-[10px]">Lags Bypassed</span>
+                    <span className="font-bold text-indigo-400">{lagRecoveries} auto-fixed</span>
+                  </div>
+                </div>
+
+                {/* Resync Action Button */}
+                {onFlushAndResync && (
+                  <button
+                    onClick={() => {
+                      onFlushAndResync();
+                      setShowAntiLagMenu(false);
+                    }}
+                    className="w-full py-2 bg-indigo-600/80 hover:bg-indigo-600 text-white rounded-xl text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    Flush Buffer & Resync Stream
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
 
-      {/* Bottom Bar */}
-      <div className="w-full bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pt-12 flex flex-col gap-3">
-        {/* Seek Bar */}
+      {/* Bottom Controls Bar */}
+      <div className="w-full bg-gradient-to-t from-black/95 via-black/70 to-transparent p-4 pt-12 flex flex-col gap-3">
+        {/* Seek Bar (for VOD/Series) */}
         {!isLive && (
           <div 
             className="w-full h-1.5 hover:h-2.5 transition-all bg-gray-800 cursor-pointer rounded-full relative group"
@@ -133,6 +250,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
             <button 
               onClick={handlePlayPause}
               className="text-white hover:text-indigo-400 transition-colors p-2"
+              title={isPlaying ? 'Pause (Space)' : 'Play (Space)'}
             >
               {isPlaying ? <Pause className="w-7 h-7 fill-current" /> : <Play className="w-7 h-7 fill-current" />}
             </button>
@@ -145,6 +263,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
               <button 
                 onClick={toggleMute}
                 className="text-white hover:text-indigo-400 transition-colors p-2"
+                title="Mute (M)"
               >
                 {isMuted || volume === 0 ? <VolumeX className="w-6 h-6" /> : <Volume2 className="w-6 h-6" />}
               </button>
@@ -164,7 +283,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
 
             <div className="text-white text-sm font-medium tracking-wide">
               {isLive ? (
-                <span className="flex items-center gap-2">
+                <span className="flex items-center gap-2 bg-red-600/20 px-2.5 py-1 rounded-full border border-red-500/40 text-xs font-bold text-red-400">
                   <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span>
                   LIVE
                 </span>
@@ -185,6 +304,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
               <button 
                 onClick={togglePiP}
                 className={`transition-colors p-2 ${isPiP ? 'text-indigo-400' : 'text-white hover:text-indigo-400'}`}
+                title="Picture in Picture"
               >
                 <PictureInPicture2 className="w-5 h-5" />
               </button>
@@ -193,6 +313,7 @@ export default function PlayerControls({ videoRef, isLive, title, onBack }: Play
             <button 
               onClick={toggleFullscreen}
               className="text-white hover:text-indigo-400 transition-colors p-2"
+              title="Fullscreen (F)"
             >
               {isFullscreen ? <Minimize className="w-6 h-6" /> : <Maximize className="w-6 h-6" />}
             </button>

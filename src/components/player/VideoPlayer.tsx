@@ -24,8 +24,8 @@ export default function VideoPlayer({
   const [showControls, setShowControls] = useState(true);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Hook up video player engine & events
-  const { retry } = useVideoPlayer(videoRef, src, type, autoPlay);
+  // Hook up video player engine & events with Anti-Lag
+  const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay);
 
   const {
     isLoading,
@@ -213,6 +213,7 @@ export default function VideoPlayer({
           isLive={type === 'live'}
           title={title}
           onBack={onBack}
+          onFlushAndResync={flushAndResync}
         />
       </div>
     </div>
