@@ -21,8 +21,8 @@ const PlayerPage: React.FC = () => {
   const api = useXtreamAPI();
   const { addToHistory, updateProgress } = useHistoryStore();
 
-  // Smart default format extension: preserve original container extension from server
-  const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
+  // Smart default format extension: ts for live, mp4 for vod
+  const defaultExt = type === 'live' ? 'ts' : 'mp4';
   const paramExt = searchParams.get('ext');
   const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') 
     ? paramExt.toLowerCase() 

@@ -239,8 +239,10 @@ export function useVideoPlayer(
     video.oncanplay = () => {
       onPlaybackStarted();
       if (autoPlay) {
-        video.play().catch((e) => {
-          console.warn('[OnyxStream] Autoplay waiting for user interaction:', e.message);
+        video.play().catch(() => {
+          console.warn('[OnyxStream] Autoplay blocked, falling back to muted play...');
+          video.muted = true;
+          video.play().catch((e2) => console.warn('[OnyxStream] Play error:', e2.message));
         });
       }
     };
@@ -463,7 +465,13 @@ export function useVideoPlayer(
       console.log('[OnyxStream Engine] Booting HTML5 direct player for:', streamUrl);
       video.src = streamUrl;
       video.load();
-      if (autoPlay) video.play().catch(console.warn);
+      if (autoPlay) {
+        video.play().catch(() => {
+          console.warn('[OnyxStream] Direct autoplay blocked, playing muted...');
+          video.muted = true;
+          video.play().catch(console.warn);
+        });
+      }
     };
 
     const isExplicitM3u8 = src.includes('.m3u8') || src.includes('m3u8');

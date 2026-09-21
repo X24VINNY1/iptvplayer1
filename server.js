@@ -166,34 +166,72 @@ function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
 /**
  * Resolves the optimal browser-compatible MIME type so HTML5 video decoders don't reject the stream.
  */
-function determineMimeType(rawMime, targetUrl, finalUrl) {
-  const low = (rawMime || '').toLowerCase();
-  if (low.includes('video/mp4') || low.includes('video/webm') || low.includes('video/ogg')) {
-    return low;
-  }
-  if (low.includes('video/mp2t')) {
+/**
+ * Resolves the optimal browser-compatible MIME type so HTML5 video decoders don't reject the stream.
+ */
+function determineMimeType(rawMime, targetUrl, finalUrl, isBinary = false) {
+  if (isBinary) {
     return 'video/mp2t';
   }
-  if (low.includes('mpegurl')) {
-    return 'application/vnd.apple.mpegurl; charset=utf-8';
-  }
+  const low = (rawMime || '').toLowerCase();
+  if (low.includes('video/mp4')) return 'video/mp4';
+  if (low.includes('video/mp2t')) return 'video/mp2t';
+  if (low.includes('video/webm')) return 'video/webm';
+  if (low.includes('mpegurl')) return 'application/vnd.apple.mpegurl; charset=utf-8';
 
   const cleanUrl = (finalUrl || targetUrl || '').toLowerCase();
   if (cleanUrl.includes('.ts')) return 'video/mp2t';
   if (cleanUrl.includes('.mp4')) return 'video/mp4';
-  if (cleanUrl.includes('.mkv') || cleanUrl.includes('.avi') || cleanUrl.includes('.mov')) return 'video/mp4';
-  if (cleanUrl.includes('.webm')) return 'video/webm';
+  if (cleanUrl.includes('.mkv') || cleanUrl.includes('.avi')) return 'video/mp4';
   if (cleanUrl.includes('.m3u8')) return 'application/vnd.apple.mpegurl; charset=utf-8';
   return 'video/mp4';
 }
 
+const USER_AGENTS = [
+  'IPTVSmartersPlayer',
+  'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
+  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'okhttp/4.9.0'
+];
+
+async function fetchUpstreamStream(targetUrl, rangeHeader, userAgentIndex = 0) {
+  const ua = USER_AGENTS[userAgentIndex] || USER_AGENTS[0];
+  const headers = {
+    'User-Agent': ua,
+    'Accept': '*/*',
+    'Connection': 'keep-alive',
+    'Icy-MetaData': '1',
+  };
+  if (rangeHeader) {
+    headers['Range'] = rangeHeader;
+  }
+
+  try {
+    const res = await axios({
+      method: 'get',
+      url: targetUrl,
+      responseType: 'stream',
+      headers,
+      timeout: 15000,
+      maxRedirects: 5,
+      validateStatus: (status) => status < 400,
+    });
+    return res;
+  } catch (err) {
+    if (userAgentIndex < USER_AGENTS.length - 1 && (err.response?.status === 403 || err.response?.status === 401 || err.code === 'ECONNRESET')) {
+      console.log(`[Proxy Retry] UA "${ua}" failed (${err.message}), retrying with next User-Agent...`);
+      return fetchUpstreamStream(targetUrl, rangeHeader, userAgentIndex + 1);
+    }
+    throw err;
+  }
+}
+
 /**
  * Universal Zero-Lag Streaming Proxy
- * - Inspects first chunk: if #EXTM3U text, buffers manifest and rewrites URLs
- * - If binary video (MPEG-TS, MP4, MKV), pipes IMMEDIATELY without waiting for EOF
- * - Eliminates infinite buffering on live TS streams
- * - Normalizes MIME types so browser decoder never triggers MEDIA_ERR_SRC_NOT_SUPPORTED
- * - Forwards 206 Partial Content & Range headers for seamless VOD seeking
+ * - Multi-tier User-Agent fallback (Smarters, VLC, Chrome, OkHttp)
+ * - Raw binary live stream pipe (video/mp2t) for mpegts.js
+ * - Fast manifest flusher for Hls.js
+ * - Native 206 Partial Content range forwarding for VOD seek
  */
 const handleProxyRequest = async (req, res) => {
   const targetUrl = req.query.url;
@@ -201,27 +239,8 @@ const handleProxyRequest = async (req, res) => {
     return res.status(400).send('Missing "url" query parameter');
   }
 
-  const outgoingHeaders = {
-    'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
-    'Accept': '*/*',
-    'Connection': 'keep-alive',
-    'Icy-MetaData': '1'
-  };
-
-  if (req.headers.range) {
-    outgoingHeaders['Range'] = req.headers.range;
-  }
-
   try {
-    const upstreamResponse = await axios({
-      method: 'get',
-      url: targetUrl,
-      responseType: 'stream',
-      headers: outgoingHeaders,
-      timeout: 15000,
-      maxRedirects: 5,
-      validateStatus: (status) => status < 400
-    });
+    const upstreamResponse = await fetchUpstreamStream(targetUrl, req.headers.range, 0);
 
     const finalUrl = upstreamResponse.request?.res?.responseUrl || targetUrl;
     const stream = upstreamResponse.data;
@@ -232,7 +251,7 @@ const handleProxyRequest = async (req, res) => {
     // 1. VOD Movies & Series: Immediate native pipe streaming with 206 Range & CORS support
     if (isVod) {
       res.status(upstreamResponse.status || 200);
-      res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl));
+      res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl, false));
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -256,25 +275,45 @@ const handleProxyRequest = async (req, res) => {
       return stream.pipe(res);
     }
 
-    // 2. Playlists & Live Streams: inspect initial chunk
+    // 2. Playlists & Live Streams
     let isManifest = false;
     let manifestBuffer = '';
+    let manifestTimer = null;
+
+    const flushManifest = () => {
+      if (manifestTimer) clearTimeout(manifestTimer);
+      if (!res.headersSent) {
+        const rewritten = rewriteM3U8(manifestBuffer, finalUrl, '/proxy?url=');
+        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Access-Control-Allow-Origin', '*');
+        res.status(200).send(rewritten);
+      }
+    };
 
     stream.once('data', (chunk) => {
-      const snippet = chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim();
-      if (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT')) {
-        // True M3U8 text manifest
+      // An M3U8 playlist starts with '#' (ASCII 0x23)
+      const isText = chunk.length > 0 && chunk[0] === 0x23;
+      const snippet = isText ? chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim() : '';
+
+      if (isText && (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT'))) {
         isManifest = true;
         manifestBuffer += chunk.toString('utf-8');
 
+        // Flush manifest as soon as segments are buffered or after 120ms debounce
+        manifestTimer = setTimeout(flushManifest, 120);
+
         stream.on('data', (nextChunk) => {
           manifestBuffer += nextChunk.toString('utf-8');
+          if (manifestBuffer.includes('#EXT-X-ENDLIST') || manifestBuffer.split('\n').length > 5) {
+            flushManifest();
+          }
         });
       } else {
-        // Binary Live Stream (e.g. MPEG-TS) -> pipe immediately!
+        // Binary Live MPEG-TS Stream: pipe immediately with video/mp2t!
         isManifest = false;
         res.status(upstreamResponse.status || 200);
-        res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl));
+        res.setHeader('Content-Type', 'video/mp2t');
         res.setHeader('Accept-Ranges', 'bytes');
         res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -289,15 +328,10 @@ const handleProxyRequest = async (req, res) => {
     });
 
     stream.on('end', () => {
-      if (!res.headersSent) {
-        if (isManifest) {
-          const rewritten = rewriteM3U8(manifestBuffer, finalUrl, '/proxy?url=');
-          res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-          res.status(200).send(rewritten);
-        } else {
-          res.status(upstreamResponse.status || 200).end();
-        }
+      if (isManifest) {
+        flushManifest();
+      } else if (!res.headersSent) {
+        res.status(upstreamResponse.status || 200).end();
       }
     });
 
@@ -309,6 +343,7 @@ const handleProxyRequest = async (req, res) => {
     });
 
     req.on('close', () => {
+      if (manifestTimer) clearTimeout(manifestTimer);
       if (stream && typeof stream.destroy === 'function') {
         stream.destroy();
       }

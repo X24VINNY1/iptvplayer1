@@ -43,7 +43,7 @@ const LiveTVPage: React.FC = () => {
   const [viewMode, setViewMode] = useState<'preview' | 'grid'>('preview');
   const [previewChannel, setPreviewChannel] = useState<LiveStream | null>(null);
   const [channelSearch, setChannelSearch] = useState('');
-  const [isMuted, setIsMuted] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
   const [volume, setVolume] = useState(1);
 
   const previewVideoRef = useRef<HTMLVideoElement>(null);
@@ -156,11 +156,7 @@ const LiveTVPage: React.FC = () => {
   }, [previewChannel, viewMode, serverUrl, username, password, connectionType]);
 
   const handleChannelClick = (channel: LiveStream) => {
-    if (viewMode === 'preview') {
-      setPreviewChannel(channel);
-    } else {
-      launchFullscreen(channel);
-    }
+    launchFullscreen(channel);
   };
 
   const launchFullscreen = (channel: LiveStream) => {
@@ -311,6 +307,7 @@ const LiveTVPage: React.FC = () => {
                   return (
                     <div
                       key={channel.stream_id}
+                      onMouseEnter={() => setPreviewChannel(channel)}
                       onClick={() => handleChannelClick(channel)}
                       className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${
                         isSelected

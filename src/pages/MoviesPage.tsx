@@ -311,15 +311,12 @@ const MoviesPage: React.FC = () => {
                   <div
                     key={movie.stream_id}
                     onMouseEnter={() => setFocusedMovie(movie)}
-                    onClick={() => {
-                      setFocusedMovie(movie);
-                      handleMovieClick(movie);
-                    }}
+                    onClick={() => handlePlay(movie)}
                     className={`cursor-pointer transition-all transform duration-200 ${
                       isFocused ? 'scale-105 ring-2 ring-indigo-500 z-10 rounded-xl' : 'hover:scale-102 opacity-90 hover:opacity-100'
                     }`}
                   >
-                    <MovieCard movie={movie} onClick={() => {}} />
+                    <MovieCard movie={movie} onClick={() => handlePlay(movie)} />
                   </div>
                 );
               })}
@@ -345,7 +342,7 @@ const MoviesPage: React.FC = () => {
                 <MovieCard
                   key={movie.stream_id}
                   movie={movie}
-                  onClick={() => handleMovieClick(movie)}
+                  onClick={() => handlePlay(movie)}
                 />
               ))}
             </div>

@@ -155,7 +155,7 @@ function streamProxyPlugin() {
         }
 
         const outgoingHeaders: Record<string, string> = {
-          'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
+          'User-Agent': 'IPTVSmartersPlayer',
           'Accept': '*/*',
           'Icy-MetaData': '1'
         };
@@ -175,15 +175,29 @@ function streamProxyPlugin() {
         }
 
         try {
-          const upstreamResponse = await axios({
-            method: 'get',
-            url: targetUrl,
-            responseType: 'stream',
-            headers: outgoingHeaders,
-            timeout: 15000,
-            maxRedirects: 5,
-            validateStatus: (status) => status < 400,
-          });
+          let upstreamResponse: any;
+          const uas = [
+            'IPTVSmartersPlayer',
+            'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36'
+          ];
+          for (const ua of uas) {
+            try {
+              outgoingHeaders['User-Agent'] = ua;
+              upstreamResponse = await axios({
+                method: 'get',
+                url: targetUrl,
+                responseType: 'stream',
+                headers: outgoingHeaders,
+                timeout: 15000,
+                maxRedirects: 5,
+                validateStatus: (status) => status < 400,
+              });
+              break;
+            } catch (err: any) {
+              if (ua === uas[uas.length - 1]) throw err;
+            }
+          }
 
           const finalUrl = (upstreamResponse.request as any)?.res?.responseUrl || targetUrl;
           const stream = upstreamResponse.data;
@@ -212,25 +226,42 @@ function streamProxyPlugin() {
             return stream.pipe(res);
           }
 
-          // 2. Playlists & Live Streams: inspect initial chunk
+          // 2. Playlists & Live Streams
           let isManifest = false;
           let manifestBuffer = '';
+          let manifestTimer: any = null;
+
+          const flushManifest = () => {
+            if (manifestTimer) clearTimeout(manifestTimer);
+            if (!res.headersSent) {
+              const rewritten = rewriteM3U8(manifestBuffer, finalUrl, '/proxy?url=');
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+              res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+              res.end(rewritten);
+            }
+          };
 
           stream.once('data', (chunk: any) => {
-            const snippet = chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim();
-            if (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT')) {
-              // True M3U8 text manifest
+            const isText = chunk.length > 0 && chunk[0] === 0x23;
+            const snippet = isText ? chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim() : '';
+
+            if (isText && (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT'))) {
               isManifest = true;
               manifestBuffer += chunk.toString('utf-8');
+              manifestTimer = setTimeout(flushManifest, 120);
 
               stream.on('data', (nextChunk: any) => {
                 manifestBuffer += nextChunk.toString('utf-8');
+                if (manifestBuffer.includes('#EXT-X-ENDLIST') || manifestBuffer.split('\n').length > 5) {
+                  flushManifest();
+                }
               });
             } else {
-              // Binary Live Stream (e.g. MPEG-TS) -> pipe immediately!
               isManifest = false;
               res.statusCode = upstreamResponse.status || 200;
-              res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl));
+              res.setHeader('Content-Type', 'video/mp2t');
               res.setHeader('Accept-Ranges', 'bytes');
               res.setHeader('Access-Control-Allow-Origin', '*');
 
@@ -245,17 +276,11 @@ function streamProxyPlugin() {
           });
 
           stream.on('end', () => {
-            if (!res.headersSent) {
-              if (isManifest) {
-                const rewritten = rewriteM3U8(manifestBuffer, finalUrl, '/proxy?url=');
-                res.statusCode = 200;
-                res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-                res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-                res.end(rewritten);
-              } else {
-                res.statusCode = upstreamResponse.status || 200;
-                res.end();
-              }
+            if (isManifest) {
+              flushManifest();
+            } else if (!res.headersSent) {
+              res.statusCode = upstreamResponse.status || 200;
+              res.end();
             }
           });
 
@@ -267,6 +292,7 @@ function streamProxyPlugin() {
           });
 
           req.on('close', () => {
+            if (manifestTimer) clearTimeout(manifestTimer);
             if (stream && typeof stream.destroy === 'function') {
               stream.destroy();
             }
