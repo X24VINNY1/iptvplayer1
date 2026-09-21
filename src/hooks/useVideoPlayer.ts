@@ -6,7 +6,8 @@ export function useVideoPlayer(
   videoRef: React.RefObject<HTMLVideoElement>,
   src: string | null,
   type: 'live' | 'vod' | 'series' = 'vod',
-  autoPlay: boolean = true
+  autoPlay: boolean = true,
+  onFormatFallback?: () => void
 ) {
   const {
     setIsPlaying,
@@ -24,7 +25,8 @@ export function useVideoPlayer(
 
   const hlsRef = useRef<Hls | null>(null);
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const attemptsRef = useRef(0);
+  const mediaRecoveriesRef = useRef<number>(0);
+  const attemptsRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
   const stallCounterRef = useRef<number>(0);
 
@@ -43,11 +45,22 @@ export function useVideoPlayer(
     }
   }, [videoRef]);
 
-  // Generate HLS buffer configuration based on chosen Anti-Lag mode
+  // Robust HLS config tuned for IPTV streams (handles PTS gaps, non-standard audio, and bandwidth drops)
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
     const baseConfig = {
       enableWorker: true,
-      capLevelToPlayerSize: true, // Optimizes bandwidth and drops lag
+      capLevelToPlayerSize: true,
+      // Audio codec fallback for IPTV streams broadcasting AC3/MP2 audio
+      defaultAudioCodec: 'mp4a.40.2',
+      // Tolerate timestamp gaps and segment duration drift
+      maxBufferHole: 0.8,
+      maxSeekHole: 2,
+      nudgeOffset: 0.2,
+      nudgeMaxRetry: 8,
+      maxFragLookUpTolerance: 0.3,
+      fragLoadingTimeOut: 25000,
+      manifestLoadingTimeOut: 25000,
+      levelLoadingTimeOut: 25000,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
       }
@@ -63,7 +76,7 @@ export function useVideoPlayer(
           backBufferLength: 30,
           liveSyncDurationCount: 4,
           liveMaxLatencyDurationCount: 12,
-          maxLiveSyncPlaybackRate: 1.15, // Catch up smoothly without freezing
+          maxLiveSyncPlaybackRate: 1.15,
           lowLatencyMode: false
         };
       case 'balanced':
@@ -101,12 +114,12 @@ export function useVideoPlayer(
     setError(null);
     stallCounterRef.current = 0;
     lastTimeRef.current = 0;
+    mediaRecoveriesRef.current = 0;
 
-    // Apply audio levels
     video.volume = volume;
     video.muted = isMuted;
 
-    // Attach standard HTML5 video event handlers
+    // Standard HTML5 media event listeners
     video.onplay = () => {
       setIsPlaying(true);
       setIsLoading(false);
@@ -137,7 +150,6 @@ export function useVideoPlayer(
     video.ontimeupdate = () => {
       setCurrentTime(video.currentTime);
 
-      // Measure current forward buffer health
       if (video.buffered && video.buffered.length > 0) {
         const pos = video.currentTime;
         for (let i = 0; i < video.buffered.length; i++) {
@@ -163,30 +175,34 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
+    // Video error handler with smart recovery
     video.onerror = () => {
       const err = video.error;
       console.warn('HTML5 Video Error code:', err?.code, err?.message);
 
-      if (attemptsRef.current < 3) {
-        attemptsRef.current += 1;
-        retryTimeoutRef.current = setTimeout(() => {
-          initPlayer();
-        }, 1500 * attemptsRef.current);
-      } else {
-        setError(
-          err?.message ||
-            'Stream playback failed. The stream may be offline or in an unsupported format.'
-        );
-        setIsLoading(false);
+      // If HLS is active, let HLS try to recover the media pipeline first
+      if (hlsRef.current && mediaRecoveriesRef.current < 2) {
+        mediaRecoveriesRef.current += 1;
+        console.log(`[Anti-Lag] Recovering media error from video element (attempt ${mediaRecoveriesRef.current})...`);
+        hlsRef.current.recoverMediaError();
+        return;
       }
+
+      // If persistent format error on Live TV or VOD, try alternate format (e.g. TS instead of M3U8)
+      if (onFormatFallback && attemptsRef.current === 0) {
+        attemptsRef.current += 1;
+        console.log('[OnyxStream] Format error encountered. Auto-trying alternate stream format...');
+        onFormatFallback();
+        return;
+      }
+
+      setError(
+        'Format Error: Stream format unsupported by current player. Use the "Switch Format" button above to try TS / alternate stream.'
+      );
+      setIsLoading(false);
     };
 
-    // Determine HLS vs Direct
-    const isHls =
-      src.includes('.m3u8') ||
-      type === 'live' ||
-      src.includes('/live/');
-
+    // Proxy routing for HTTPS -> HTTP
     let effectiveSrc = src;
     if (
       typeof window !== 'undefined' &&
@@ -197,7 +213,9 @@ export function useVideoPlayer(
       effectiveSrc = `/proxy?url=${encodeURIComponent(src)}`;
     }
 
-    if (isHls && Hls.isSupported()) {
+    const isHlsUrl = effectiveSrc.includes('.m3u8') || (type === 'live' && !effectiveSrc.endsWith('.ts'));
+
+    if (isHlsUrl && Hls.isSupported()) {
       const hlsConfig = getHlsConfig(antiLagMode);
       const hls = new Hls(hlsConfig);
       hlsRef.current = hls;
@@ -217,7 +235,6 @@ export function useVideoPlayer(
 
       hls.on(Hls.Events.ERROR, (event, data) => {
         if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          console.warn('[Anti-Lag] Buffer stalled! Priming decoder...');
           if (antiLagEnabled) {
             incrementLagRecovery();
             hls.startLoad();
@@ -228,31 +245,48 @@ export function useVideoPlayer(
         if (data.fatal) {
           switch (data.type) {
             case Hls.ErrorTypes.NETWORK_ERROR:
-              console.log('[Anti-Lag] Network dropout, restarting HLS loader...');
+              console.log('[Anti-Lag] Network error, restarting HLS loader...');
               hls.startLoad();
               break;
 
             case Hls.ErrorTypes.MEDIA_ERROR:
-              console.log('[Anti-Lag] Media decode error, recovering media...');
-              hls.recoverMediaError();
+              if (mediaRecoveriesRef.current < 2) {
+                mediaRecoveriesRef.current += 1;
+                console.log(`[Anti-Lag] Recovering media error (attempt ${mediaRecoveriesRef.current})...`);
+                hls.recoverMediaError();
+              } else if (mediaRecoveriesRef.current === 2) {
+                mediaRecoveriesRef.current += 1;
+                console.log('[Anti-Lag] Swapping audio codec and recovering media...');
+                hls.swapAudioCodec();
+                hls.recoverMediaError();
+              } else {
+                console.warn('[Anti-Lag] Fatal media error unrecoverable. Attempting fallback...');
+                if (onFormatFallback) {
+                  onFormatFallback();
+                } else {
+                  setError('Media format error: Decoder encountered unsupported stream codec.');
+                }
+              }
               break;
 
             default:
-              console.log('[Anti-Lag] Fatal error, falling back to direct video tag...');
-              hls.destroy();
-              hlsRef.current = null;
-              video.src = effectiveSrc;
-              video.load();
-              if (autoPlay) video.play().catch(console.warn);
+              console.warn('[Anti-Lag] Fatal HLS error:', data.details);
+              if (onFormatFallback) {
+                onFormatFallback();
+              } else {
+                setError(`Playback Error: ${data.details}`);
+              }
               break;
           }
         }
       });
-    } else if (isHls && video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (isHlsUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+      // Native Apple Safari HLS
       video.src = effectiveSrc;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
     } else {
+      // Direct media playback (MP4, MKV, direct TS on supported platforms)
       video.src = effectiveSrc;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
@@ -267,6 +301,7 @@ export function useVideoPlayer(
     antiLagMode,
     antiLagEnabled,
     getHlsConfig,
+    onFormatFallback,
     setIsLoading,
     setError,
     setIsPlaying,
@@ -276,7 +311,7 @@ export function useVideoPlayer(
     incrementLagRecovery
   ]);
 
-  // Anti-Lag Watchdog: checks every second for frozen playheads
+  // Anti-Lag Watchdog for freeze prevention
   useEffect(() => {
     if (!antiLagEnabled) return;
 
@@ -286,16 +321,13 @@ export function useVideoPlayer(
         return;
       }
 
-      // Check if currentTime is unchanged
       if (video.currentTime === lastTimeRef.current) {
         stallCounterRef.current += 1;
 
-        // If stalled for 3+ consecutive seconds while playing
         if (stallCounterRef.current >= 3) {
-          console.warn('[Anti-Lag Watchdog] Freeze detected! Bypassing stall...');
+          console.warn('[Anti-Lag Watchdog] Freeze detected! Skipping bad packet...');
           incrementLagRecovery();
 
-          // Strategy 1: If there is buffer ahead, jump 0.5s forward past corrupt packet
           if (video.buffered && video.buffered.length > 0) {
             const pos = video.currentTime;
             for (let i = 0; i < video.buffered.length; i++) {
@@ -311,7 +343,6 @@ export function useVideoPlayer(
             }
           }
 
-          // Strategy 2: If live, jump directly to newest live edge
           if (type === 'live' && video.buffered && video.buffered.length > 0) {
             const liveEdge = video.buffered.end(video.buffered.length - 1);
             video.currentTime = Math.max(0, liveEdge - 1);
@@ -337,9 +368,7 @@ export function useVideoPlayer(
     return () => cleanup();
   }, [initPlayer, cleanup]);
 
-  // Resync / Flush Buffer Method (User triggerable)
   const flushAndResync = () => {
-    console.log('[Anti-Lag] Flushing buffer and resyncing...');
     attemptsRef.current = 0;
     initPlayer();
   };

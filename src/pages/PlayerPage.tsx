@@ -138,6 +138,7 @@ const PlayerPage: React.FC = () => {
         title={title} 
         type={type as 'live' | 'vod' | 'series'} 
         onBack={handleBack}
+        onFormatFallback={toggleStreamFormat}
       />
 
       {/* Stream format switcher pill for troubleshooting tricky IPTV feeds */}
