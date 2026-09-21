@@ -27,7 +27,10 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   };
 
   return (
-    <div className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-950 border-r border-gray-800/50 transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}>
+    <div 
+      data-tv-section="sidebar"
+      className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-950 border-r border-gray-800/50 transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}
+    >
       <div className="flex items-center h-16 px-4 mb-6">
         <div className="flex items-center gap-3 text-indigo-500 font-bold text-xl overflow-hidden">
           <Play className="w-8 h-8 fill-indigo-500 flex-shrink-0" />
@@ -40,8 +43,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
           <NavLink
             key={item.path}
             to={item.path}
+            data-tv-focusable="true"
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors whitespace-nowrap ${
+              `flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-600/30 focus:text-white ${
                 isActive
                   ? 'bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500'
                   : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
@@ -58,8 +62,9 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
       <div className="p-2 space-y-2 mb-4 border-t border-gray-800/50 pt-4">
         <NavLink
           to="/settings"
+          data-tv-focusable="true"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 rounded-lg transition-colors whitespace-nowrap ${
+            `flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-600/30 focus:text-white ${
               isActive
                 ? 'bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500'
                 : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
@@ -72,7 +77,8 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
         </NavLink>
         <button
           onClick={handleLogout}
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/50 transition-colors whitespace-nowrap"
+          data-tv-focusable="true"
+          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-red-500 focus:bg-red-600/20 focus:text-red-300"
           title={collapsed ? 'Logout' : undefined}
         >
           <LogOut className="w-5 h-5 flex-shrink-0" />

@@ -13,8 +13,18 @@ const MovieCard = React.memo(function MovieCard({ movie, onClick }: MovieCardPro
 
   return (
     <div 
+      tabIndex={0}
+      role="button"
+      data-tv-focusable="true"
+      data-tv-section="content"
       onClick={onClick}
-      className="relative rounded-xl overflow-hidden aspect-[2/3] cursor-pointer group bg-gray-900 transition-transform duration-300 hover:scale-[1.03] hover:shadow-xl hover:shadow-indigo-500/10"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className="relative rounded-xl overflow-hidden aspect-[2/3] cursor-pointer group bg-gray-900 transition-all duration-150 hover:scale-[1.03] hover:shadow-xl outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.07] focus:z-30 focus:shadow-2xl focus:shadow-indigo-500/30"
     >
       {!imgError && movie.stream_icon ? (
         <img 

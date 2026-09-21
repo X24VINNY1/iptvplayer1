@@ -152,12 +152,13 @@ const SeriesDetailPage: React.FC = () => {
       <div className="px-6 md:px-8 py-8 flex-1">
         {/* Seasons Tabs */}
         {seriesInfo.seasons && seriesInfo.seasons.length > 0 && (
-          <div className="flex overflow-x-auto scrollbar-hide space-x-2 mb-8 border-b border-gray-800 pb-2">
+          <div data-tv-section="categories" className="flex overflow-x-auto scrollbar-hide space-x-2 mb-8 border-b border-gray-800 pb-2">
             {seriesInfo.seasons.map((season) => (
               <button
                 key={season.season_number}
+                data-tv-focusable="true"
                 onClick={() => setActiveSeason(season.season_number)}
-                className={`whitespace-nowrap px-6 py-3 rounded-t-lg font-medium transition-colors ${
+                className={`whitespace-nowrap px-6 py-3 rounded-t-lg font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:scale-105 ${
                   activeSeason === season.season_number
                     ? 'text-indigo-400 border-b-2 border-indigo-500 bg-gray-900/50'
                     : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
@@ -170,7 +171,7 @@ const SeriesDetailPage: React.FC = () => {
         )}
 
         {/* Episodes Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div data-tv-section="content" className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {episodesForSeason.length > 0 ? (
             episodesForSeason.map((episode) => (
               <EpisodeCard

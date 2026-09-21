@@ -86,18 +86,30 @@ const DashboardPage: React.FC = () => {
   const renderHistoryItem = (item: any, isContinueWatching: boolean) => {
     const progressPercent = item.duration ? (item.progress / item.duration) * 100 : 0;
     
+    const playItem = () => {
+      let url = `/player/${item.type}/${item.streamId}?name=${encodeURIComponent(item.name)}`;
+      if (item.containerExtension) url += `&ext=${item.containerExtension}`;
+      if (item.icon) url += `&icon=${encodeURIComponent(item.icon)}`;
+      if (item.seasonNum) url += `&season=${item.seasonNum}`;
+      if (item.episodeNum) url += `&episode=${item.episodeNum}`;
+      if (item.seriesId) url += `&seriesId=${item.seriesId}`;
+      navigate(url);
+    };
+
     return (
       <div 
         key={`${item.type}-${item.streamId || item.id}`} 
-        className="flex-none w-64 mr-4 cursor-pointer group relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 hover:border-indigo-500/50 transition-colors"
-        onClick={() => {
-          let url = `/player/${item.type}/${item.streamId}?name=${encodeURIComponent(item.name)}`;
-          if (item.containerExtension) url += `&ext=${item.containerExtension}`;
-          if (item.icon) url += `&icon=${encodeURIComponent(item.icon)}`;
-          if (item.seasonNum) url += `&season=${item.seasonNum}`;
-          if (item.episodeNum) url += `&episode=${item.episodeNum}`;
-          if (item.seriesId) url += `&seriesId=${item.seriesId}`;
-          navigate(url);
+        tabIndex={0}
+        role="button"
+        data-tv-focusable="true"
+        data-tv-section="content"
+        className="flex-none w-64 mr-4 cursor-pointer group relative rounded-xl overflow-hidden bg-gray-900 border border-gray-800 transition-all duration-150 outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.04] focus:z-20"
+        onClick={playItem}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+            e.preventDefault();
+            playItem();
+          }
         }}
       >
         <div className="aspect-video relative overflow-hidden bg-gray-800">
@@ -163,7 +175,7 @@ const DashboardPage: React.FC = () => {
               <h2 className="text-xl font-semibold text-white">Live TV Channels</h2>
               <p className="text-xs text-gray-400">Top channels from your active categories</p>
             </div>
-            <Link to="/live" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
+            <Link to="/live" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleLive.map(channel => (
@@ -182,7 +194,7 @@ const DashboardPage: React.FC = () => {
               <h2 className="text-xl font-semibold text-white">Movies / VOD</h2>
               <p className="text-xs text-gray-400">Featured titles from your active categories</p>
             </div>
-            <Link to="/movies" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
+            <Link to="/movies" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleMovies.map(movie => (
@@ -201,7 +213,7 @@ const DashboardPage: React.FC = () => {
               <h2 className="text-xl font-semibold text-white">TV Series</h2>
               <p className="text-xs text-gray-400">Popular series from your active categories</p>
             </div>
-            <Link to="/series" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
+            <Link to="/series" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleSeries.map(item => (

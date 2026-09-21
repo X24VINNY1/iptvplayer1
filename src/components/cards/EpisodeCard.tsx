@@ -16,8 +16,18 @@ const EpisodeCard = React.memo(function EpisodeCard({ episode, episodeNumber, on
 
   return (
     <div 
+      tabIndex={0}
+      role="button"
+      data-tv-focusable="true"
+      data-tv-section="content"
       onClick={onClick}
-      className="flex flex-col sm:flex-row gap-4 bg-gray-900/50 rounded-xl p-3 hover:bg-gray-800 cursor-pointer transition-colors group"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className="flex flex-col sm:flex-row gap-4 bg-gray-900/50 rounded-xl p-3 hover:bg-gray-800 cursor-pointer transition-all duration-150 group outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.03] focus:bg-gray-800 focus:z-20"
     >
       <div className="relative w-full sm:w-40 shrink-0 aspect-video rounded-lg overflow-hidden bg-gray-800">
         {!imgError && image ? (

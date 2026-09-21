@@ -30,16 +30,19 @@
   }
 
   /* TV Remote D-pad focus enhancement */
-  button:focus-visible, 
-  a:focus-visible, 
-  input:focus-visible, 
-  [tabindex="0"]:focus-visible,
-  .card-hover:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.9), 0 0 20px rgba(99, 102, 241, 0.6);
-    transform: scale(1.04);
-    transition: transform 0.15s ease, box-shadow 0.15s ease;
-    z-index: 20;
+  .tv-focused,
+  button:focus,
+  a:focus,
+  input:focus,
+  [data-tv-focusable="true"]:focus,
+  [tabindex="0"]:focus,
+  .card-hover:focus {
+    outline: none !important;
+    box-shadow: 0 0 0 3px #6366f1, 0 0 25px rgba(99, 102, 241, 0.75) !important;
+    transform: scale(1.04) !important;
+    transition: transform 0.15s ease-out, box-shadow 0.15s ease-out !important;
+    z-index: 30 !important;
+    position: relative;
   }
 }
 

@@ -209,12 +209,13 @@ const LiveTVPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div data-tv-section="categories" className="flex items-center gap-2">
             {/* View Mode Toggle */}
             <div className="flex bg-gray-900 border border-gray-800 rounded-lg p-0.5">
               <button
+                data-tv-focusable="true"
                 onClick={() => setViewMode('preview')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
                   viewMode === 'preview'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -225,8 +226,9 @@ const LiveTVPage: React.FC = () => {
                 Preview Mode
               </button>
               <button
+                data-tv-focusable="true"
                 onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
                   viewMode === 'grid'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -240,8 +242,9 @@ const LiveTVPage: React.FC = () => {
 
             {/* Multi-View button */}
             <button
+              data-tv-focusable="true"
               onClick={() => navigate('/multiview')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-semibold shadow-sm transition-all"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-950/60 hover:bg-indigo-900/80 text-indigo-300 border border-indigo-500/40 rounded-lg text-xs font-semibold shadow-sm transition-all outline-none focus:ring-2 focus:ring-indigo-400"
               title="Watch up to 4 channels simultaneously"
             >
               <Grid className="w-3.5 h-3.5 text-indigo-400" />
@@ -250,8 +253,9 @@ const LiveTVPage: React.FC = () => {
 
             {/* Quick US filter */}
             <button
+              data-tv-focusable="true"
               onClick={handleQuickUsFilter}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold border border-gray-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold border border-gray-700 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
               title="Automatically hide foreign categories and keep only US / USA / EN"
             >
               <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
@@ -260,8 +264,9 @@ const LiveTVPage: React.FC = () => {
 
             {/* Organize */}
             <button
+              data-tv-focusable="true"
               onClick={() => setIsCategoryModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
               Organize
@@ -307,13 +312,24 @@ const LiveTVPage: React.FC = () => {
                   return (
                     <div
                       key={channel.stream_id}
+                      tabIndex={0}
+                      role="button"
+                      data-tv-focusable="true"
+                      data-tv-section="content"
+                      onFocus={() => setPreviewChannel(channel)}
                       onMouseEnter={() => setPreviewChannel(channel)}
                       onClick={() => handleChannelClick(channel)}
-                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all ${
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+                          e.preventDefault();
+                          handleChannelClick(channel);
+                        }
+                      }}
+                      className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all outline-none ${
                         isSelected
-                          ? 'bg-indigo-600/20 border-l-4 border-indigo-500 text-white shadow-inner'
+                          ? 'bg-indigo-600/30 border-l-4 border-indigo-500 text-white shadow-inner ring-2 ring-indigo-500/50'
                           : 'hover:bg-gray-900/60 text-gray-300'
-                      }`}
+                      } focus:ring-4 focus:ring-indigo-500 focus:bg-indigo-600/40 focus:text-white focus:z-10`}
                     >
                       {channel.stream_icon ? (
                         <img
@@ -457,8 +473,10 @@ const LiveTVPage: React.FC = () => {
                   </div>
 
                   <button
+                    data-tv-focusable="true"
+                    data-tv-section="preview"
                     onClick={() => launchFullscreen(previewChannel)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/25 transition-all"
+                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/25 transition-all outline-none focus:ring-4 focus:ring-indigo-400 focus:scale-105"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     Watch Fullscreen

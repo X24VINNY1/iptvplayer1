@@ -15,12 +15,16 @@ export default function CategoryFilter({
   className = ''
 }: CategoryFilterProps) {
   return (
-    <div className={`flex items-center overflow-x-auto gap-2 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${className}`}>
+    <div 
+      data-tv-section="categories"
+      className={`flex items-center overflow-x-auto gap-2 py-1 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none] ${className}`}
+    >
       <button
+        data-tv-focusable="true"
         onClick={() => onSelect(null)}
-        className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+        className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:scale-105 focus:z-10 ${
           selectedId === null
-            ? 'bg-indigo-600 text-white'
+            ? 'bg-indigo-600 text-white shadow-md'
             : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
         }`}
       >
@@ -29,10 +33,11 @@ export default function CategoryFilter({
       {categories.map((category) => (
         <button
           key={category.category_id}
+          data-tv-focusable="true"
           onClick={() => onSelect(category.category_id)}
-          className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-colors ${
+          className={`whitespace-nowrap px-4 py-2 rounded-full text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:scale-105 focus:z-10 ${
             selectedId === category.category_id
-              ? 'bg-indigo-600 text-white'
+              ? 'bg-indigo-600 text-white shadow-md'
               : 'bg-gray-800 text-gray-300 hover:bg-gray-700'
           }`}
         >

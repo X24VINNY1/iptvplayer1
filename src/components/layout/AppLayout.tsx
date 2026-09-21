@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Outlet } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Header from './Header';
+import { useTVRemote } from '@/hooks/useTVRemote';
 
 export default function AppLayout() {
+  useTVRemote();
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 

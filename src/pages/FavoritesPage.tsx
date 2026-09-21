@@ -59,14 +59,15 @@ const FavoritesPage: React.FC = () => {
       <div className="flex-none pt-4 px-6 pb-2 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
         <h1 className="text-2xl font-bold text-white mb-4">My Favorites</h1>
         
-        <div className="flex space-x-2 overflow-x-auto scrollbar-hide pb-2">
+        <div data-tv-section="categories" className="flex space-x-2 overflow-x-auto scrollbar-hide pb-2">
           {(['all', 'live', 'vod', 'series'] as FilterType[]).map(t => {
             if (connectionType === 'm3u' && (t === 'vod' || t === 'series')) return null;
             return (
               <button
                 key={t}
+                data-tv-focusable="true"
                 onClick={() => setFilter(t)}
-                className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-indigo-400 focus:scale-105 ${
                   filter === t 
                     ? 'bg-indigo-600 text-white' 
                     : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-white'
@@ -91,7 +92,7 @@ const FavoritesPage: React.FC = () => {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
+          <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
             {filteredFavorites.map(fav => {
               if (fav.type === 'live') {
                 return <ChannelCard key={`live-${fav.id}`} channel={favToLiveStream(fav)} onClick={() => handleLiveClick(fav)} />;

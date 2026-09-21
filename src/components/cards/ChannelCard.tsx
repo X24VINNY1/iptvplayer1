@@ -13,8 +13,18 @@ const ChannelCard = React.memo(function ChannelCard({ channel, epgTitle, onClick
 
   return (
     <div 
+      tabIndex={0}
+      role="button"
+      data-tv-focusable="true"
+      data-tv-section="content"
       onClick={onClick}
-      className="relative bg-gray-900 rounded-xl p-3 hover:bg-gray-800 cursor-pointer transition-all duration-200 hover:scale-[1.02] hover:shadow-lg flex items-center gap-4 group"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === 'Select' || e.keyCode === 13 || e.keyCode === 23) {
+          e.preventDefault();
+          onClick();
+        }
+      }}
+      className="relative bg-gray-900 rounded-xl p-3 hover:bg-gray-800 cursor-pointer transition-all duration-150 hover:scale-[1.02] hover:shadow-lg flex items-center gap-4 group outline-none focus:ring-4 focus:ring-indigo-500 focus:scale-[1.05] focus:bg-gray-800 focus:z-20"
     >
       <div className="relative shrink-0">
         {!imgError && channel.stream_icon ? (

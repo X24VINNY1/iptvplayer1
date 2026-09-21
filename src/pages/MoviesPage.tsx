@@ -174,12 +174,13 @@ const MoviesPage: React.FC = () => {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div data-tv-section="categories" className="flex items-center gap-2">
             {/* View Mode Toggle */}
             <div className="flex bg-gray-900 border border-gray-800 rounded-lg p-0.5">
               <button
+                data-tv-focusable="true"
                 onClick={() => setViewMode('cinematic')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
                   viewMode === 'cinematic'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -190,8 +191,9 @@ const MoviesPage: React.FC = () => {
                 Cinematic
               </button>
               <button
+                data-tv-focusable="true"
                 onClick={() => setViewMode('grid')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
                   viewMode === 'grid'
                     ? 'bg-indigo-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -204,16 +206,18 @@ const MoviesPage: React.FC = () => {
             </div>
 
             <button
+              data-tv-focusable="true"
               onClick={handleQuickUsFilter}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
             >
               <Sparkles className="w-3.5 h-3.5" />
               US / EN Only
             </button>
 
             <button
+              data-tv-focusable="true"
               onClick={() => setIsCategoryModalOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-colors"
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
               Organize
@@ -272,18 +276,20 @@ const MoviesPage: React.FC = () => {
                   High-definition on-demand streaming. Instant zero-lag playback with native audio decoders and full seek support.
                 </p>
 
-                <div className="flex items-center gap-3 pt-2">
+                <div data-tv-section="hero" className="flex items-center gap-3 pt-2">
                   <button
+                    data-tv-focusable="true"
                     onClick={() => handlePlay(focusedMovie)}
-                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm shadow-xl shadow-indigo-600/30 hover:scale-105 active:scale-95 transition-all"
+                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm shadow-xl shadow-indigo-600/30 hover:scale-105 active:scale-95 transition-all outline-none focus:ring-4 focus:ring-indigo-400"
                   >
                     <Play className="w-4 h-4 fill-current" />
                     Play Now
                   </button>
 
                   <button
+                    data-tv-focusable="true"
                     onClick={() => handleMovieClick(focusedMovie)}
-                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-900/80 hover:bg-gray-800 text-gray-200 font-semibold rounded-xl text-sm border border-gray-700/80 transition-all"
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-900/80 hover:bg-gray-800 text-gray-200 font-semibold rounded-xl text-sm border border-gray-700/80 transition-all outline-none focus:ring-4 focus:ring-indigo-400"
                   >
                     <Info className="w-4 h-4 text-indigo-400" />
                     Details
@@ -304,16 +310,17 @@ const MoviesPage: React.FC = () => {
 
           {/* Bottom Movie Poster Strip / Grid */}
           <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-16">
+            <div data-tv-section="content" className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-16">
               {filteredMovies.map((movie) => {
                 const isFocused = focusedMovie?.stream_id === movie.stream_id;
                 return (
                   <div
                     key={movie.stream_id}
+                    onFocus={() => setFocusedMovie(movie)}
                     onMouseEnter={() => setFocusedMovie(movie)}
                     onClick={() => handlePlay(movie)}
-                    className={`cursor-pointer transition-all transform duration-200 ${
-                      isFocused ? 'scale-105 ring-2 ring-indigo-500 z-10 rounded-xl' : 'hover:scale-102 opacity-90 hover:opacity-100'
+                    className={`transition-all transform duration-200 ${
+                      isFocused ? 'scale-105 z-10' : 'opacity-90 hover:opacity-100'
                     }`}
                   >
                     <MovieCard movie={movie} onClick={() => handlePlay(movie)} />

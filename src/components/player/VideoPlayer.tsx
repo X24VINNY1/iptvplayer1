@@ -98,68 +98,81 @@ export default function VideoPlayer({
       handleUserActivity();
       if (!videoRef.current) return;
 
-      switch (e.key) {
-        case ' ':
-        case 'k':
-        case 'K':
-        case 'Enter':
-        case 'Select':
-          e.preventDefault();
-          if (videoRef.current.paused) {
-            videoRef.current.play().catch(console.warn);
-          } else {
-            videoRef.current.pause();
-          }
-          break;
-        case 'f':
-        case 'F':
-          e.preventDefault();
-          toggleFullscreen();
-          break;
-        case 'm':
-        case 'M':
-          e.preventDefault();
-          toggleMute();
-          break;
-        case 'ArrowRight':
-          e.preventDefault();
-          if (type !== 'live') {
-            videoRef.current.currentTime = Math.min(
-              videoRef.current.currentTime + 10,
-              videoRef.current.duration || 0
-            );
-          }
-          break;
-        case 'ArrowLeft':
-          e.preventDefault();
-          if (type !== 'live') {
-            videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
-          }
-          break;
-        case 'ArrowUp':
-          e.preventDefault();
-          {
-            const newVol = Math.min(videoRef.current.volume + 0.1, 1);
-            videoRef.current.volume = newVol;
-            setVolume(newVol);
-          }
-          break;
-        case 'ArrowDown':
-          e.preventDefault();
-          {
-            const newVol = Math.max(videoRef.current.volume - 0.1, 0);
-            videoRef.current.volume = newVol;
-            setVolume(newVol);
-          }
-          break;
-        case 'Escape':
-        case 'Back':
-          if (document.fullscreenElement) {
-            document.exitFullscreen();
-          } else if (onBack) {
-            onBack();
-          }
-          break;
+      const keyCode = e.keyCode || e.which;
+      const key = e.key;
+
+      const isSelect = key === ' ' || key === 'k' || key === 'K' || key === 'Enter' || key === 'Select' || keyCode === 13 || keyCode === 23 || keyCode === 66;
+      const isRight = key === 'ArrowRight' || keyCode === 39 || keyCode === 22;
+      const isLeft = key === 'ArrowLeft' || keyCode === 37 || keyCode === 21;
+      const isUp = key === 'ArrowUp' || keyCode === 38 || keyCode === 19;
+      const isDown = key === 'ArrowDown' || keyCode === 40 || keyCode === 20;
+      const isBack = key === 'Escape' || key === 'Back' || key === 'BrowserBack' || key === 'GoBack' || keyCode === 27 || keyCode === 4;
+
+      if (isSelect) {
+        e.preventDefault();
+        if (videoRef.current.paused) {
+          videoRef.current.play().catch(console.warn);
+        } else {
+          videoRef.current.pause();
+        }
+        return;
+      }
+
+      if (key === 'f' || key === 'F') {
+        e.preventDefault();
+        toggleFullscreen();
+        return;
+      }
+
+      if (key === 'm' || key === 'M') {
+        e.preventDefault();
+        toggleMute();
+        return;
+      }
+
+      if (isRight) {
+        e.preventDefault();
+        if (type !== 'live') {
+          videoRef.current.currentTime = Math.min(
+            videoRef.current.currentTime + 10,
+            videoRef.current.duration || 0
+          );
+        }
+        return;
+      }
+
+      if (isLeft) {
+        e.preventDefault();
+        if (type !== 'live') {
+          videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+        }
+        return;
+      }
+
+      if (isUp) {
+        e.preventDefault();
+        const newVol = Math.min(videoRef.current.volume + 0.1, 1);
+        videoRef.current.volume = newVol;
+        setVolume(newVol);
+        return;
+      }
+
+      if (isDown) {
+        e.preventDefault();
+        const newVol = Math.max(videoRef.current.volume - 0.1, 0);
+        videoRef.current.volume = newVol;
+        setVolume(newVol);
+        return;
+      }
+
+      if (isBack) {
+        e.preventDefault();
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        } else if (onBack) {
+          onBack();
+        }
+        return;
       }
     };
 
