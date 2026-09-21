@@ -132,4 +132,29 @@
     .text-tv-lg { font-size: 1.25rem; }
     .text-tv-xl { font-size: 1.5rem; }
   }
+
+  /* Live TV Pulsing indicator */
+  .live-pulse {
+    animation: live-pulse 1.8s ease-in-out infinite;
+  }
+  @keyframes live-pulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+}
+
+:root {
+  --background: #07071a;
+  --foreground: #e8e8ff;
+  --card: #0f0f28;
+  --card-foreground: #e8e8ff;
+  --primary: #4d7fff;
+  --primary-foreground: #ffffff;
+  --secondary: #1a1a3a;
+  --secondary-foreground: #b0b0d0;
+  --muted: #12122a;
+  --muted-foreground: #7070a0;
+  --accent: #00d4ff;
+  --accent-foreground: #07071a;
+  --border: rgba(120, 120, 200, 0.12);
 }

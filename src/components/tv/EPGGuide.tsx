@@ -19,12 +19,14 @@ const ChannelRow = React.memo(({
   channel, 
   isFocused, 
   onSelect,
+  onFocus,
   currentTime,
   startDate,
 }: { 
   channel: LiveStream; 
   isFocused: boolean; 
   onSelect: () => void;
+  onFocus: () => void;
   currentTime: Date;
   startDate: Date;
 }) => {
@@ -55,6 +57,7 @@ const ChannelRow = React.memo(({
       data-tv-focusable="true"
       data-tv-section="content"
       tabIndex={0}
+      onFocus={onFocus}
       onClick={onSelect}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === 'Select') {
@@ -151,6 +154,12 @@ const EPGGuide: React.FC<EPGGuideProps> = ({ channels, onSelectChannel, focusedC
     }
   }, [visibleCount, channels.length]);
 
+  const handleChannelFocus = useCallback((index: number) => {
+    if (index >= displayedChannels.length - 12 && visibleCount < channels.length) {
+      setVisibleCount(prev => Math.min(prev + 50, channels.length));
+    }
+  }, [displayedChannels.length, visibleCount, channels.length]);
+
   return (
     <div className="flex-1 flex flex-col min-h-0 bg-gray-950 overflow-hidden">
       {/* Time Header */}
@@ -190,29 +199,17 @@ const EPGGuide: React.FC<EPGGuideProps> = ({ channels, onSelectChannel, focusedC
         className="flex-1 overflow-y-auto overflow-x-hidden scrollbar-thin pb-20 relative"
         onScroll={handleScroll}
       >
-        {displayedChannels.map(channel => (
+        {displayedChannels.map((channel, index) => (
           <ChannelRow 
             key={channel.stream_id}
             channel={channel}
             isFocused={focusedChannelId === channel.stream_id}
             onSelect={() => onSelectChannel(channel)}
+            onFocus={() => handleChannelFocus(index)}
             currentTime={currentTime}
             startDate={startDate}
           />
         ))}
-        {visibleCount < channels.length && (
-          <div className="p-4 text-center">
-             <button
-                type="button"
-                data-tv-focusable="true"
-                data-tv-section="content"
-                onClick={() => setVisibleCount((prev) => Math.min(prev + 50, channels.length))}
-                className="px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-400"
-              >
-                Load More Channels ({visibleCount} of {channels.length})
-              </button>
-          </div>
-        )}
       </div>
     </div>
   );

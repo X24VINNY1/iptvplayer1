@@ -332,11 +332,26 @@ function navigateSpatialFocus(direction: 'up' | 'down' | 'left' | 'right') {
     }
   }
 
+  // Section confinement: Up/Down within content stays strictly within content
+  // NEVER allow vertical navigation to jump into sidebar footer / taskbar
+  let candidatePool = focusables;
+  if (currentSection === 'content' && (direction === 'up' || direction === 'down')) {
+    candidatePool = focusables.filter((el) => {
+      const sec = el.closest('[data-tv-section]')?.getAttribute('data-tv-section');
+      return sec === 'content';
+    });
+  } else if (currentSection === 'sidebar' && (direction === 'up' || direction === 'down')) {
+    candidatePool = focusables.filter((el) => {
+      const sec = el.closest('[data-tv-section]')?.getAttribute('data-tv-section');
+      return sec === 'sidebar';
+    });
+  }
+
   // 3. Mathematical Directional Spatial Candidate Scoring
   let bestElement: HTMLElement | null = null;
   let bestScore = Infinity;
 
-  for (const el of focusables) {
+  for (const el of candidatePool) {
     if (el === current) continue;
     const rect = el.getBoundingClientRect();
     const center = {

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Hls from 'hls.js';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
-import { useCategoryStore } from '@/store/useCategoryStore';
+import { useCategoryStore, isUsOrEn } from '@/store/useCategoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import { useTVRemote } from '@/hooks/useTVRemote';
 import { getProxiedStreamUrl } from '@/utils/url';
@@ -34,7 +34,7 @@ const LiveTVPage: React.FC = () => {
   const { serverUrl, username, password, connectionType, m3uChannels } = useAuthStore();
   const api = useXtreamAPI();
   const { liveCategories, liveStreams, isLoaded, syncAll, isSyncing } = useContentStore();
-  const { getVisibleCategories, isCategoryHidden, filterUsOnly } = useCategoryStore();
+  const { getVisibleCategories, isCategoryHidden, filterUsOnly, usOnlyEnabled, toggleUsOnly } = useCategoryStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -73,13 +73,18 @@ const LiveTVPage: React.FC = () => {
     return getVisibleCategories('live', liveCategories);
   }, [liveCategories, getVisibleCategories]);
 
-  // Filter streams: only show streams belonging to visible categories
+  // Filter streams: only show streams belonging to visible categories (and US/EN when active)
   const filteredStreams = useMemo(() => {
     const hiddenSet = new Set(
       liveCategories.filter((c) => isCategoryHidden('live', c.category_id)).map((c) => c.category_id)
     );
 
     let streams = liveStreams.filter((s) => !hiddenSet.has(s.category_id));
+
+    if (usOnlyEnabled) {
+      const visibleCatIds = new Set(visibleCategories.map((c) => c.category_id));
+      streams = streams.filter((s) => visibleCatIds.has(s.category_id) || isUsOrEn(s.name));
+    }
 
     if (selectedCategory !== null) {
       streams = streams.filter((s) => s.category_id === selectedCategory);
@@ -91,7 +96,7 @@ const LiveTVPage: React.FC = () => {
     }
 
     return streams;
-  }, [liveStreams, liveCategories, selectedCategory, channelSearch, isCategoryHidden]);
+  }, [liveStreams, liveCategories, visibleCategories, selectedCategory, channelSearch, isCategoryHidden, usOnlyEnabled]);
 
   // Performance: Windowed chunk rendering to prevent Android TV DOM freezing
   const [visibleCount, setVisibleCount] = useState(50);
@@ -101,7 +106,7 @@ const LiveTVPage: React.FC = () => {
   // Reset windowing pagination when filters change
   useEffect(() => {
     setVisibleCount(50);
-  }, [selectedCategory, channelSearch]);
+  }, [selectedCategory, channelSearch, usOnlyEnabled]);
 
   const displayedStreams = useMemo(() => {
     return filteredStreams.slice(0, visibleCount);
@@ -120,7 +125,7 @@ const LiveTVPage: React.FC = () => {
     setFocusedChannelId(channel.stream_id);
 
     // Auto-expand next chunk as remote D-pad approaches bottom
-    if (index >= displayedStreams.length - 8 && visibleCount < filteredStreams.length) {
+    if (index >= displayedStreams.length - 12 && visibleCount < filteredStreams.length) {
       setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length));
     }
 
@@ -355,15 +360,19 @@ const LiveTVPage: React.FC = () => {
               Multi-View (4-Way)
             </button>
 
-            {/* Quick US filter */}
+            {/* Quick US filter toggle */}
             <button
               data-tv-focusable="true"
-              onClick={handleQuickUsFilter}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-semibold border border-gray-700 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
-              title="Automatically hide foreign categories and keep only US / USA / EN"
+              onClick={() => toggleUsOnly()}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
+                usOnlyEnabled
+                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30'
+                  : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border-gray-700'
+              }`}
+              title="Toggle US / USA / EN filter"
             >
-              <Sparkles className="w-3.5 h-3.5 text-indigo-400" />
-              US / EN Only
+              <Sparkles className={`w-3.5 h-3.5 ${usOnlyEnabled ? 'text-amber-300' : 'text-indigo-400'}`} />
+              {usOnlyEnabled ? 'US / EN (Active)' : 'All Regions'}
             </button>
 
             {/* Organize */}

@@ -2,7 +2,7 @@ import React, { useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
-import { useCategoryStore } from '@/store/useCategoryStore';
+import { useCategoryStore, isUsOrEn } from '@/store/useCategoryStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import ChannelCard from '@/components/cards/ChannelCard';
@@ -30,7 +30,7 @@ const DashboardPage: React.FC = () => {
     syncAll
   } = useContentStore();
 
-  const { isCategoryHidden } = useCategoryStore();
+  const { isCategoryHidden, usOnlyEnabled, getVisibleCategories } = useCategoryStore();
 
   const continueWatching = getContinueWatching();
   const recentlyWatched = getHistory(20);
@@ -44,27 +44,42 @@ const DashboardPage: React.FC = () => {
     }
   }, [isLoaded, isSyncing, api, connectionType, m3uChannels, syncAll]);
 
-  // Filter items from hidden categories
+  // Filter items from hidden categories (and apply US / USA / EN filter by default)
   const visibleLive = useMemo(() => {
     const hiddenSet = new Set(
       liveCategories.filter((c) => isCategoryHidden('live', c.category_id)).map((c) => c.category_id)
     );
-    return liveStreams.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 20);
-  }, [liveStreams, liveCategories, isCategoryHidden]);
+    let streams = liveStreams.filter((s) => !hiddenSet.has(s.category_id));
+    if (usOnlyEnabled) {
+      const visibleCats = new Set(getVisibleCategories('live', liveCategories).map(c => c.category_id));
+      streams = streams.filter(s => visibleCats.has(s.category_id) || isUsOrEn(s.name));
+    }
+    return streams.slice(0, 20);
+  }, [liveStreams, liveCategories, isCategoryHidden, usOnlyEnabled, getVisibleCategories]);
 
   const visibleMovies = useMemo(() => {
     const hiddenSet = new Set(
       vodCategories.filter((c) => isCategoryHidden('vod', c.category_id)).map((c) => c.category_id)
     );
-    return vodStreams.filter((m) => !hiddenSet.has(m.category_id)).slice(0, 20);
-  }, [vodStreams, vodCategories, isCategoryHidden]);
+    let movies = vodStreams.filter((m) => !hiddenSet.has(m.category_id));
+    if (usOnlyEnabled) {
+      const visibleCats = new Set(getVisibleCategories('vod', vodCategories).map(c => c.category_id));
+      movies = movies.filter(m => visibleCats.has(m.category_id) || isUsOrEn(m.name));
+    }
+    return movies.slice(0, 20);
+  }, [vodStreams, vodCategories, isCategoryHidden, usOnlyEnabled, getVisibleCategories]);
 
   const visibleSeries = useMemo(() => {
     const hiddenSet = new Set(
       seriesCategories.filter((c) => isCategoryHidden('series', c.category_id)).map((c) => c.category_id)
     );
-    return seriesList.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 20);
-  }, [seriesList, seriesCategories, isCategoryHidden]);
+    let series = seriesList.filter((s) => !hiddenSet.has(s.category_id));
+    if (usOnlyEnabled) {
+      const visibleCats = new Set(getVisibleCategories('series', seriesCategories).map(c => c.category_id));
+      series = series.filter(s => visibleCats.has(s.category_id) || isUsOrEn(s.name));
+    }
+    return series.slice(0, 20);
+  }, [seriesList, seriesCategories, isCategoryHidden, usOnlyEnabled, getVisibleCategories]);
 
   const handleLiveClick = (channel: LiveStream) => {
     if (connectionType === 'm3u' && channel.direct_source) {

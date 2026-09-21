@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
-import { useCategoryStore } from '@/store/useCategoryStore';
+import { useCategoryStore, isUsOrEn } from '@/store/useCategoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import { useTVRemote } from '@/hooks/useTVRemote';
 import CategoryFilter from '@/components/ui/CategoryFilter';
@@ -29,7 +29,7 @@ const SeriesPage: React.FC = () => {
   const { connectionType, m3uChannels } = useAuthStore();
   const api = useXtreamAPI();
   const { seriesCategories, seriesList, isLoaded, syncAll, isSyncing } = useContentStore();
-  const { getVisibleCategories, isCategoryHidden, filterUsOnly } = useCategoryStore();
+  const { getVisibleCategories, isCategoryHidden, filterUsOnly, usOnlyEnabled, toggleUsOnly } = useCategoryStore();
 
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
@@ -69,13 +69,18 @@ const SeriesPage: React.FC = () => {
     return getVisibleCategories('series', seriesCategories);
   }, [seriesCategories, getVisibleCategories]);
 
-  // Filter series
+  // Filter series (with US / USA / EN filter active by default)
   const filteredSeries = useMemo(() => {
     const hiddenSet = new Set(
       seriesCategories.filter((c) => isCategoryHidden('series', c.category_id)).map((c) => c.category_id)
     );
 
     let list = seriesList.filter((s) => !hiddenSet.has(s.category_id));
+
+    if (usOnlyEnabled) {
+      const visibleCatIds = new Set(visibleCategories.map((c) => c.category_id));
+      list = list.filter((s) => visibleCatIds.has(s.category_id) || isUsOrEn(s.name));
+    }
 
     if (selectedCategory !== null) {
       list = list.filter((s) => s.category_id === selectedCategory);
@@ -87,12 +92,12 @@ const SeriesPage: React.FC = () => {
     }
 
     return list;
-  }, [seriesList, seriesCategories, selectedCategory, searchQuery, isCategoryHidden]);
+  }, [seriesList, seriesCategories, visibleCategories, selectedCategory, searchQuery, isCategoryHidden, usOnlyEnabled]);
 
   // Reset pagination on filter or category change
   useEffect(() => {
     setVisibleCount(48);
-  }, [selectedCategory, searchQuery]);
+  }, [selectedCategory, searchQuery, usOnlyEnabled]);
 
   const displayedSeries = useMemo(() => {
     return filteredSeries.slice(0, visibleCount);
@@ -219,13 +224,19 @@ const SeriesPage: React.FC = () => {
               </button>
             </div>
 
+            {/* Quick US filter toggle */}
             <button
               data-tv-focusable="true"
-              onClick={handleQuickUsFilter}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all outline-none focus:ring-2 focus:ring-indigo-400"
+              onClick={() => toggleUsOnly()}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold border transition-all outline-none focus:ring-2 focus:ring-indigo-400 ${
+                usOnlyEnabled
+                  ? 'bg-indigo-600 text-white border-indigo-400 shadow-md shadow-indigo-600/30'
+                  : 'bg-gray-800 hover:bg-gray-700 text-gray-400 border-gray-700'
+              }`}
+              title="Toggle US / USA / EN filter"
             >
-              <Sparkles className="w-3.5 h-3.5" />
-              US / EN Only
+              <Sparkles className={`w-3.5 h-3.5 ${usOnlyEnabled ? 'text-amber-300' : 'text-indigo-400'}`} />
+              {usOnlyEnabled ? 'US / EN (Active)' : 'All Regions'}
             </button>
 
             <button
