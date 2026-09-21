@@ -169,8 +169,9 @@ const LiveTVPage: React.FC = () => {
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
+        enableWorker: false,
+        enableSoftwareAES: true,
+        lowLatencyMode: false,
         backBufferLength: 15,
         maxBufferSize: 30 * 1000 * 1000,
         maxBufferLength: 20,
@@ -491,6 +492,13 @@ const LiveTVPage: React.FC = () => {
                   <video
                     ref={previewVideoRef}
                     className="w-full h-full object-contain bg-black"
+                    style={{
+                      backgroundColor: '#000',
+                      transform: 'translate3d(0, 0, 0)',
+                      WebkitTransform: 'translate3d(0, 0, 0)',
+                      backfaceVisibility: 'hidden',
+                      WebkitBackfaceVisibility: 'hidden',
+                    }}
                     autoPlay
                     playsInline
                     muted={isMuted}

@@ -35,6 +35,7 @@ export function useVideoPlayer(
   const autoFallbackTriggeredRef = useRef<boolean>(false);
   const triedEnginesRef = useRef<Set<string>>(new Set());
   const activeEngineRef = useRef<string | null>(null);
+  const playbackSessionIdRef = useRef<number>(0);
 
   // Keep references to dynamic props to keep initPlayer stable
   const onAutoFallbackFormatRef = useRef(onAutoFallbackFormat);
@@ -116,22 +117,28 @@ export function useVideoPlayer(
 
   // Full cleanup (invoked when changing channels or unmounting)
   const cleanup = useCallback(() => {
+    // Invalidate any active playback session to immediately drop pending callbacks
+    playbackSessionIdRef.current += 1;
     cleanupActiveEngine();
     triedEnginesRef.current.clear();
   }, [cleanupActiveEngine]);
 
-  // Fast-reacting HLS config tuned for universal codec detection & zero lag
+  // Bulletproof HLS configuration tuned for zero green screens, zero frame corruption, and smooth buffering
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
     const baseConfig: Partial<Hls['config']> = {
-      enableWorker: true,
+      // CRITICAL: enableWorker: false cures green screens and corrupted macroblocks on Android TV chipsets.
+      // Transferable ArrayBuffers between worker and main thread often corrupt YUV chroma slices under low-memory TV environments.
+      enableWorker: false,
+      enableSoftwareAES: true,
       capLevelToPlayerSize: true,
-      maxBufferHole: 0.8,
-      nudgeOffset: 0.2,
-      nudgeMaxRetry: 8,
-      maxFragLookUpTolerance: 0.3,
-      fragLoadingTimeOut: 12000,
-      manifestLoadingTimeOut: 10000,
-      levelLoadingTimeOut: 10000,
+      maxBufferHole: 0.5,
+      nudgeOffset: 0.1,
+      nudgeMaxRetry: 10,
+      maxFragLookUpTolerance: 0.25,
+      maxAudioFramesDrift: 1,
+      fragLoadingTimeOut: 15000,
+      manifestLoadingTimeOut: 12000,
+      levelLoadingTimeOut: 12000,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
       }
@@ -141,26 +148,26 @@ export function useVideoPlayer(
       case 'smooth':
         return {
           ...baseConfig,
-          maxBufferLength: 40,
-          maxMaxBufferLength: 80,
-          maxBufferSize: 60 * 1000 * 1000,
-          backBufferLength: 20,
-          liveSyncDurationCount: 3,
-          liveMaxLatencyDurationCount: 10,
-          maxLiveSyncPlaybackRate: 1.15,
+          maxBufferLength: 30,
+          maxMaxBufferLength: 60,
+          maxBufferSize: 50 * 1000 * 1000,
+          backBufferLength: 15,
+          liveSyncDurationCount: 4,
+          liveMaxLatencyDurationCount: 8,
+          maxLiveSyncPlaybackRate: 1.05,
           lowLatencyMode: false
         };
       case 'balanced':
         return {
           ...baseConfig,
           maxBufferLength: 20,
-          maxMaxBufferLength: 45,
+          maxMaxBufferLength: 40,
           maxBufferSize: 30 * 1000 * 1000,
-          backBufferLength: 15,
+          backBufferLength: 10,
           liveSyncDurationCount: 3,
           liveMaxLatencyDurationCount: 7,
-          maxLiveSyncPlaybackRate: 1.1,
-          lowLatencyMode: true
+          maxLiveSyncPlaybackRate: 1.05,
+          lowLatencyMode: false
         };
       case 'low-latency':
         return {
@@ -168,10 +175,10 @@ export function useVideoPlayer(
           maxBufferLength: 10,
           maxMaxBufferLength: 20,
           maxBufferSize: 15 * 1000 * 1000,
-          backBufferLength: 10,
+          backBufferLength: 5,
           liveSyncDurationCount: 2,
-          liveMaxLatencyDurationCount: 4,
-          lowLatencyMode: true
+          liveMaxLatencyDurationCount: 5,
+          lowLatencyMode: false
         };
     }
   }, []);
@@ -180,7 +187,11 @@ export function useVideoPlayer(
     const video = videoRef.current;
     if (!video || !src) return;
 
-    cleanup();
+    // Increment session ID to discard all pending callbacks from prior channel
+    const currentSession = ++playbackSessionIdRef.current;
+
+    cleanupActiveEngine();
+    triedEnginesRef.current.clear();
     setIsLoading(true);
     setError(null);
     stallCounterRef.current = 0;
@@ -190,14 +201,16 @@ export function useVideoPlayer(
 
     video.volume = volume;
     video.muted = isMuted;
+    video.playsInline = true;
     // NOTE: NEVER set video.crossOrigin = 'anonymous'!
     // IPTV streams rarely provide Access-Control-Allow-Origin headers; setting crossOrigin
     // forces the browser to abort playback with MEDIA_ERR_SRC_NOT_SUPPORTED.
-    video.playsInline = true;
 
     // Buffering Watchdog: kicks decoder if idle, provides seamless fallback
     clearBufferingWatchdog();
     bufferingWatchdogRef.current = setTimeout(() => {
+      if (currentSession !== playbackSessionIdRef.current) return;
+
       if (video && video.paused && video.readyState < 2) {
         console.warn('[OnyxStream Watchdog] Initial stream buffering taking longer than expected. Nudging loader...');
         if (hlsRef.current) {
@@ -213,6 +226,8 @@ export function useVideoPlayer(
         }
 
         setTimeout(() => {
+          if (currentSession !== playbackSessionIdRef.current) return;
+
           if (video && video.paused && video.readyState < 2) {
             if (!autoFallbackTriggeredRef.current && onAutoFallbackFormatRef.current) {
               autoFallbackTriggeredRef.current = true;
@@ -230,6 +245,7 @@ export function useVideoPlayer(
     }, 6000);
 
     const onPlaybackStarted = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       clearBufferingWatchdog();
       setIsLoading(false);
       setError(null);
@@ -237,24 +253,29 @@ export function useVideoPlayer(
 
     // Standard HTML5 media event listeners
     video.onplay = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       setIsPlaying(true);
       onPlaybackStarted();
     };
 
     video.onpause = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       setIsPlaying(false);
     };
 
     video.onwaiting = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       setIsLoading(true);
     };
 
     video.onplaying = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       onPlaybackStarted();
       stallCounterRef.current = 0;
     };
 
     video.oncanplay = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       onPlaybackStarted();
       if (autoPlay) {
         video.play().catch(() => {
@@ -266,6 +287,7 @@ export function useVideoPlayer(
     };
 
     video.ontimeupdate = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       setCurrentTime(video.currentTime);
 
       if (video.buffered && video.buffered.length > 0) {
@@ -281,12 +303,14 @@ export function useVideoPlayer(
     };
 
     video.ondurationchange = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       if (!isNaN(video.duration) && isFinite(video.duration)) {
         setDuration(video.duration);
       }
     };
 
     video.onloadedmetadata = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       if (!isNaN(video.duration) && isFinite(video.duration)) {
         setDuration(video.duration);
       }
@@ -295,6 +319,8 @@ export function useVideoPlayer(
 
     // Robust, zero-loop engine fallback dispatcher
     const fallbackToNextEngine = (failedEngine: string, streamUrl: string, reason?: string) => {
+      if (currentSession !== playbackSessionIdRef.current) return;
+
       triedEnginesRef.current.add(failedEngine);
       console.warn(`[OnyxStream Fallback] Engine "${failedEngine}" failed (${reason || 'unknown'}). Checking alternative decoders...`);
 
@@ -328,6 +354,8 @@ export function useVideoPlayer(
 
     // Engine bootloader
     const bootEngine = (engine: string, streamUrl: string) => {
+      if (currentSession !== playbackSessionIdRef.current) return;
+
       const vid = videoRef.current;
       if (!vid) return;
 
@@ -349,6 +377,7 @@ export function useVideoPlayer(
           hls.attachMedia(vid);
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
+            if (currentSession !== playbackSessionIdRef.current) return;
             onPlaybackStarted();
             networkErrorRetriesRef.current = 0;
             if (autoPlay) {
@@ -361,6 +390,8 @@ export function useVideoPlayer(
           });
 
           hls.on(Hls.Events.ERROR, (_event, data) => {
+            if (currentSession !== playbackSessionIdRef.current) return;
+
             if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
               if (antiLagEnabledRef.current) {
                 incrementLagRecovery();
@@ -420,7 +451,7 @@ export function useVideoPlayer(
               url: streamUrl,
             },
             {
-              enableWorker: true,
+              enableWorker: false, // Prevents thread serialization corruption on TV WebViews
               lazyLoad: false,
               liveBufferLatencyChasing: true,
               liveBufferLatencyMaxLatency: 3.0,
@@ -433,6 +464,7 @@ export function useVideoPlayer(
           player.load();
 
           player.on(mpegts.Events.ERROR, (errType: string, errDetail: string) => {
+            if (currentSession !== playbackSessionIdRef.current) return;
             console.warn('[mpegts error]', errType, errDetail);
             fallbackToNextEngine('mpegts', streamUrl, `${errType}: ${errDetail}`);
           });
@@ -462,6 +494,7 @@ export function useVideoPlayer(
 
     // Video element error handler with automatic multi-tier fallback
     video.onerror = () => {
+      if (currentSession !== playbackSessionIdRef.current) return;
       clearBufferingWatchdog();
       const err = video.error;
       console.warn('[OnyxStream] Video element error:', err?.code, err?.message);
@@ -509,7 +542,6 @@ export function useVideoPlayer(
     src,
     type,
     autoPlay,
-    cleanup,
     cleanupActiveEngine,
     clearBufferingWatchdog,
     getHlsConfig,

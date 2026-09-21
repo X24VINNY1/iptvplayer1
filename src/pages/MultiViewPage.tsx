@@ -258,9 +258,14 @@ function MultiViewSlot({
 
     if (Hls.isSupported()) {
       const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-        backBufferLength: 30,
+        enableWorker: false,
+        enableSoftwareAES: true,
+        lowLatencyMode: false,
+        backBufferLength: 20,
+        maxBufferSize: 25 * 1000 * 1000,
+        xhrSetup: (xhr: XMLHttpRequest) => {
+          xhr.withCredentials = false;
+        }
       });
       hls.loadSource(streamUrl);
       hls.attachMedia(video);
@@ -270,11 +275,32 @@ function MultiViewSlot({
       hlsRef.current = hls;
 
       return () => {
-        hls.destroy();
+        try {
+          hls.stopLoad();
+          hls.detachMedia();
+          hls.destroy();
+        } catch {}
+        hlsRef.current = null;
+        if (video) {
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {}
+        }
       };
-    } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else {
       video.src = streamUrl;
       video.play().catch(() => {});
+      return () => {
+        if (video) {
+          try {
+            video.pause();
+            video.removeAttribute('src');
+            video.load();
+          } catch {}
+        }
+      };
     }
   }, [streamUrl]);
 
@@ -309,7 +335,14 @@ function MultiViewSlot({
     >
       <video
         ref={videoRef}
-        className="w-full h-full object-contain"
+        className="w-full h-full object-contain bg-black"
+        style={{
+          backgroundColor: '#000',
+          transform: 'translate3d(0, 0, 0)',
+          WebkitTransform: 'translate3d(0, 0, 0)',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+        }}
         autoPlay
         playsInline
         muted={!hasAudio}

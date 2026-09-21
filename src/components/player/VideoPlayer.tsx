@@ -1,5 +1,6 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
+import { useContentStore } from '@/store/useContentStore';
 import PlayerControls from './PlayerControls';
 import { Loader2, AlertCircle, RefreshCw, Play, ArrowLeft, RotateCcw, Zap } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
@@ -48,6 +49,8 @@ export default function VideoPlayer({
     setVolume,
     toggleMute
   } = usePlayerStore();
+
+  const { liveStreams } = useContentStore();
 
   useEffect(() => {
     reset();
@@ -174,11 +177,26 @@ export default function VideoPlayer({
         }
         return;
       }
+
+      // TV Remote Channel Up / Down
+      const isChannelUp = key === 'ChannelUp' || key === 'PageUp' || keyCode === 166 || keyCode === 33;
+      const isChannelDown = key === 'ChannelDown' || key === 'PageDown' || keyCode === 167 || keyCode === 34;
+
+      if ((isChannelUp || isChannelDown) && type === 'live' && onSelectChannel && liveStreams.length > 0) {
+        e.preventDefault();
+        const currentIndex = liveStreams.findIndex((ch) => ch.name === title || (src && src.includes(String(ch.stream_id))));
+        const idx = currentIndex !== -1 ? currentIndex : 0;
+        const nextIndex = isChannelUp
+          ? (idx + 1) % liveStreams.length
+          : (idx - 1 + liveStreams.length) % liveStreams.length;
+        onSelectChannel(liveStreams[nextIndex]);
+        return;
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMute, setVolume, type, onBack, isPlaying, isLoading, error]);
+  }, [toggleMute, setVolume, type, onBack, isPlaying, isLoading, error, onSelectChannel, liveStreams, title, src]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -206,8 +224,16 @@ export default function VideoPlayer({
       <video
         ref={videoRef}
         className="w-full h-full object-contain cursor-pointer bg-black"
+        style={{
+          backgroundColor: '#000',
+          transform: 'translate3d(0, 0, 0)',
+          WebkitTransform: 'translate3d(0, 0, 0)',
+          backfaceVisibility: 'hidden',
+          WebkitBackfaceVisibility: 'hidden',
+        }}
         playsInline
         preload="auto"
+        disablePictureInPicture
         onClick={() => {
           if (videoRef.current) {
             if (videoRef.current.paused) videoRef.current.play().catch(console.warn);

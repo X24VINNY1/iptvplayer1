@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
 import AppLayout from '@/components/layout/AppLayout';
 import ErrorBoundary from '@/components/ui/ErrorBoundary';
@@ -22,7 +22,7 @@ const App = () => {
 
   return (
     <ErrorBoundary>
-      <BrowserRouter>
+      <HashRouter>
         <Routes>
           <Route 
             path="/login" 
@@ -53,7 +53,7 @@ const App = () => {
 
           <Route path="*" element={<Navigate to={isAuthenticated ? "/" : "/login"} replace />} />
         </Routes>
-      </BrowserRouter>
+      </HashRouter>
     </ErrorBoundary>
   );
 };
