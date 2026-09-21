@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from 'react';
 import { usePlayerStore } from '@/store/usePlayerStore';
 import PlayerControls from './PlayerControls';
-import { Loader2, AlertCircle } from 'lucide-react';
+import { Loader2, AlertCircle, RefreshCw } from 'lucide-react';
 import { useVideoPlayer } from '@/hooks/useVideoPlayer';
 
 interface VideoPlayerProps {
@@ -12,35 +12,34 @@ interface VideoPlayerProps {
   autoPlay?: boolean;
 }
 
-export default function VideoPlayer({ src, title, type = 'vod', onBack, autoPlay = true }: VideoPlayerProps) {
+export default function VideoPlayer({
+  src,
+  title,
+  type = 'vod',
+  onBack,
+  autoPlay = true
+}: VideoPlayerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const [showControls, setShowControls] = useState(true);
-  let hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
+  const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Assumes useVideoPlayer hooks up video events to the store
-  useVideoPlayer(videoRef, src);
-  
-  const { 
-    isLoading, 
+  // Hook up video player engine & events
+  const { retry } = useVideoPlayer(videoRef, src, type, autoPlay);
+
+  const {
+    isLoading,
     error,
     reset,
-    setIsPlaying,
     setIsFullscreen,
-    setCurrentTime,
     setVolume,
-    toggleMute,
-    volume,
-    isMuted
+    toggleMute
   } = usePlayerStore();
 
   useEffect(() => {
     reset();
-    if (autoPlay && videoRef.current) {
-      videoRef.current.play().catch(e => console.warn('Autoplay prevented', e));
-    }
     return () => reset();
-  }, [src, reset, autoPlay]);
+  }, [src, reset]);
 
   const handleMouseMove = () => {
     setShowControls(true);
@@ -51,7 +50,7 @@ export default function VideoPlayer({ src, title, type = 'vod', onBack, autoPlay
       if (videoRef.current && !videoRef.current.paused) {
         setShowControls(false);
       }
-    }, 3000);
+    }, 3500);
   };
 
   const handleMouseLeave = () => {
@@ -71,35 +70,41 @@ export default function VideoPlayer({ src, title, type = 'vod', onBack, autoPlay
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!videoRef.current) return;
-      
+
       switch (e.key) {
         case ' ':
+        case 'Enter':
           e.preventDefault();
-          if (videoRef.current.paused) videoRef.current.play();
-          else videoRef.current.pause();
+          if (videoRef.current.paused) {
+            videoRef.current.play().catch(console.warn);
+          } else {
+            videoRef.current.pause();
+          }
           break;
         case 'f':
         case 'F':
           e.preventDefault();
-          if (!document.fullscreenElement) {
-            containerRef.current?.requestFullscreen();
-          } else {
-            document.exitFullscreen();
-          }
+          toggleFullscreen();
           break;
         case 'm':
         case 'M':
           e.preventDefault();
           toggleMute();
-          if (videoRef.current) videoRef.current.muted = !videoRef.current.muted;
           break;
         case 'ArrowRight':
           e.preventDefault();
-          videoRef.current.currentTime = Math.min(videoRef.current.currentTime + 10, videoRef.current.duration);
+          if (type !== 'live') {
+            videoRef.current.currentTime = Math.min(
+              videoRef.current.currentTime + 10,
+              videoRef.current.duration || 0
+            );
+          }
           break;
         case 'ArrowLeft':
           e.preventDefault();
-          videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+          if (type !== 'live') {
+            videoRef.current.currentTime = Math.max(videoRef.current.currentTime - 10, 0);
+          }
           break;
         case 'ArrowUp':
           e.preventDefault();
@@ -117,13 +122,20 @@ export default function VideoPlayer({ src, title, type = 'vod', onBack, autoPlay
             setVolume(newVol);
           }
           break;
+        case 'Escape':
+          if (document.fullscreenElement) {
+            document.exitFullscreen();
+          } else if (onBack) {
+            onBack();
+          }
+          break;
       }
       handleMouseMove();
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [toggleMute, setVolume]);
+  }, [toggleMute, setVolume, type, onBack]);
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
@@ -133,59 +145,74 @@ export default function VideoPlayer({ src, title, type = 'vod', onBack, autoPlay
     }
   };
 
-  const handleDoubleClick = () => {
-    toggleFullscreen();
-  };
-
   return (
-    <div 
+    <div
       ref={containerRef}
-      className="w-full h-full bg-black relative group overflow-hidden flex flex-col"
+      className="w-full h-full bg-black relative group overflow-hidden flex flex-col select-none"
       onMouseMove={handleMouseMove}
       onMouseLeave={handleMouseLeave}
       onTouchStart={handleMouseMove}
-      onDoubleClick={handleDoubleClick}
+      onDoubleClick={toggleFullscreen}
     >
+      {/* Video Element - no crossOrigin to allow unheadered IPTV streams */}
       <video
         ref={videoRef}
-        className="w-full h-full object-contain"
-        autoPlay={autoPlay}
-        crossOrigin="anonymous"
+        className="w-full h-full object-contain cursor-pointer"
         playsInline
+        preload="auto"
+        onClick={() => {
+          if (videoRef.current) {
+            if (videoRef.current.paused) videoRef.current.play().catch(console.warn);
+            else videoRef.current.pause();
+          }
+        }}
       />
 
+      {/* Loading Spinner Overlay */}
       {isLoading && !error && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 z-10 pointer-events-none">
-          <Loader2 className="w-12 h-12 text-indigo-500 animate-spin" />
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/50 z-10 pointer-events-none">
+          <Loader2 className="w-14 h-14 text-indigo-500 animate-spin mb-3" />
+          <p className="text-gray-300 text-sm font-medium animate-pulse">Buffering stream...</p>
         </div>
       )}
 
+      {/* Error Overlay */}
       {error && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-20">
-          <AlertCircle className="w-16 h-16 text-red-500 mb-4" />
-          <h2 className="text-xl font-bold text-white mb-2">Playback Error</h2>
-          <p className="text-gray-300 mb-6 text-center max-w-md">{error}</p>
-          <button 
-            onClick={() => {
-              reset();
-              if (videoRef.current) {
-                videoRef.current.load();
-                if (autoPlay) videoRef.current.play();
-              }
-            }}
-            className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-medium transition-colors"
-          >
-            Retry
-          </button>
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/90 z-20 p-6 text-center">
+          <AlertCircle className="w-16 h-16 text-red-500 mb-4 animate-bounce" />
+          <h2 className="text-2xl font-bold text-white mb-2">Playback Error</h2>
+          <p className="text-gray-300 mb-6 max-w-md text-sm">{error}</p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={retry}
+              className="bg-indigo-600 hover:bg-indigo-500 text-white px-6 py-2.5 rounded-xl font-semibold transition-colors flex items-center gap-2 shadow-lg shadow-indigo-600/30 active:scale-95"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry Playback
+            </button>
+            {onBack && (
+              <button
+                onClick={onBack}
+                className="bg-gray-800 hover:bg-gray-700 text-gray-300 px-6 py-2.5 rounded-xl font-medium transition-colors"
+              >
+                Go Back
+              </button>
+            )}
+          </div>
         </div>
       )}
 
-      <div className={`absolute inset-0 transition-opacity duration-300 ${showControls && !error ? 'opacity-100' : 'opacity-0 pointer-events-none'} z-30`}>
-        <PlayerControls 
-          videoRef={videoRef} 
-          isLive={type === 'live'} 
-          title={title} 
-          onBack={onBack} 
+      {/* Player Controls Overlay */}
+      <div
+        className={`absolute inset-0 transition-opacity duration-300 ${
+          showControls && !error ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        } z-30`}
+      >
+        <PlayerControls
+          videoRef={videoRef}
+          isLive={type === 'live'}
+          title={title}
+          onBack={onBack}
         />
       </div>
     </div>
