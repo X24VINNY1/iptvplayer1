@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import os from 'os';
 import axios from 'axios';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -27,6 +28,92 @@ app.use((req, res, next) => {
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', timestamp: Date.now(), proxy: true });
+});
+
+// In-memory store for TV Companion phone pairing sessions
+const companionSessions = new Map();
+
+// Clean up expired sessions periodically
+setInterval(() => {
+  const now = Date.now();
+  for (const [pin, session] of companionSessions.entries()) {
+    if (now > session.expiresAt) {
+      companionSessions.delete(pin);
+    }
+  }
+}, 60000);
+
+// Get TV local network IP and port for easy phone connection
+app.get('/api/companion/info', (req, res) => {
+  const interfaces = os.networkInterfaces();
+  const addresses = [];
+  for (const name of Object.keys(interfaces)) {
+    for (const iface of interfaces[name] || []) {
+      if (iface.family === 'IPv4' && !iface.internal) {
+        addresses.push(iface.address);
+      }
+    }
+  }
+  res.json({
+    ip: addresses[0] || 'localhost',
+    allIps: addresses,
+    port: PORT,
+  });
+});
+
+// Generate a new 4-digit PIN for TV Companion
+app.get('/api/companion/new', (req, res) => {
+  // Generate a random 4-digit PIN
+  let pin;
+  do {
+    pin = Math.floor(1000 + Math.random() * 9000).toString();
+  } while (companionSessions.has(pin));
+
+  companionSessions.set(pin, {
+    createdAt: Date.now(),
+    expiresAt: Date.now() + 15 * 60 * 1000, // 15 mins
+    status: 'waiting',
+    data: null,
+  });
+
+  res.json({ pin, expiresAt: Date.now() + 15 * 60 * 1000 });
+});
+
+// Phone submits Xtream or M3U credentials for the TV
+app.post('/api/companion/submit', (req, res) => {
+  const { pin, data } = req.body;
+  if (!pin || !companionSessions.has(pin)) {
+    return res.status(404).json({ error: 'Invalid or expired PIN' });
+  }
+
+  const session = companionSessions.get(pin);
+  if (Date.now() > session.expiresAt) {
+    companionSessions.delete(pin);
+    return res.status(410).json({ error: 'PIN has expired. Generate a new one on TV.' });
+  }
+
+  session.status = 'ready';
+  session.data = data;
+  companionSessions.set(pin, session);
+
+  res.json({ success: true, message: 'Credentials transferred to TV' });
+});
+
+// TV polls for companion completion
+app.get('/api/companion/poll', (req, res) => {
+  const pin = req.query.pin;
+  if (!pin || !companionSessions.has(pin)) {
+    return res.status(404).json({ error: 'Invalid or expired session' });
+  }
+
+  const session = companionSessions.get(pin);
+  if (session.status === 'ready') {
+    const payload = session.data;
+    companionSessions.delete(pin); // One-time consumption
+    return res.json({ status: 'completed', data: payload });
+  }
+
+  res.json({ status: 'waiting' });
 });
 
 /**

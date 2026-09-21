@@ -7,13 +7,15 @@ import LoginForm from '@/components/accounts/LoginForm';
 import M3UImport from '@/components/accounts/M3UImport';
 import AccountManager from '@/components/accounts/AccountManager';
 import SyncLoadingScreen from '@/components/ui/SyncLoadingScreen';
-import { MonitorPlay } from 'lucide-react';
+import CompanionModal from '@/components/companion/CompanionModal';
+import { MonitorPlay, Smartphone } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { isAuthenticated, serverUrl, username, password, connectionType, m3uChannels } = useAuthStore();
   const { isLoaded, isSyncing, syncAll } = useContentStore();
   const [activeTab, setActiveTab] = useState<'xtream' | 'm3u'>('xtream');
+  const [isCompanionOpen, setIsCompanionOpen] = useState(false);
 
   // Trigger library sync when authenticated
   useEffect(() => {
@@ -77,10 +79,30 @@ const LoginPage: React.FC = () => {
           </button>
         </div>
 
-        <div className="mb-8">
+        <div className="mb-6">
           {activeTab === 'xtream' ? <LoginForm /> : <M3UImport />}
         </div>
+
+        {/* TV Companion Connect from Phone Button */}
+        <div className="pt-4 border-t border-gray-800/80">
+          <button
+            type="button"
+            onClick={() => setIsCompanionOpen(true)}
+            className="w-full py-2.5 px-4 bg-indigo-950/60 hover:bg-indigo-900/70 border border-indigo-500/40 rounded-xl text-indigo-300 hover:text-white text-xs font-semibold flex items-center justify-center gap-2 transition-all shadow-md"
+          >
+            <Smartphone className="w-4 h-4 text-indigo-400" />
+            Connect from Phone (QR / 4-Digit PIN)
+          </button>
+          <p className="text-center text-[10px] text-gray-500 mt-2">
+            No remote typing needed. Setup from your smartphone on Wi-Fi.
+          </p>
+        </div>
       </div>
+
+      <CompanionModal
+        isOpen={isCompanionOpen}
+        onClose={() => setIsCompanionOpen(false)}
+      />
       
       <div className="w-full max-w-4xl mt-8">
         <AccountManager />

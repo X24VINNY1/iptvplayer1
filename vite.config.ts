@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
+import os from 'os';
 import axios from 'axios';
 
 function rewriteM3U8(content: string, baseUrl: string, proxyEndpoint = '/proxy?url=') {
@@ -67,10 +68,80 @@ function determineMimeType(rawMime: string, targetUrl: string, finalUrl: string)
 
 // Development streaming proxy plugin
 function streamProxyPlugin() {
+  const companionSessions = new Map<string, any>();
+
   return {
     name: 'stream-proxy',
     configureServer(server: any) {
       server.middlewares.use(async (req: any, res: any, next: any) => {
+        // TV Companion Pairing Endpoints for Vite Dev
+        if (req.url.startsWith('/api/companion/info')) {
+          const interfaces = os.networkInterfaces();
+          const addresses: string[] = [];
+          for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name] || []) {
+              if (iface.family === 'IPv4' && !iface.internal) {
+                addresses.push(iface.address);
+              }
+            }
+          }
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ ip: addresses[0] || 'localhost', allIps: addresses, port: 3000 }));
+        }
+
+        if (req.url.startsWith('/api/companion/new')) {
+          let pin = Math.floor(1000 + Math.random() * 9000).toString();
+          companionSessions.set(pin, {
+            createdAt: Date.now(),
+            expiresAt: Date.now() + 15 * 60 * 1000,
+            status: 'waiting',
+            data: null,
+          });
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ pin, expiresAt: Date.now() + 15 * 60 * 1000 }));
+        }
+
+        if (req.url.startsWith('/api/companion/submit') && req.method === 'POST') {
+          let body = '';
+          req.on('data', (c: any) => { body += c; });
+          req.on('end', () => {
+            try {
+              const { pin, data } = JSON.parse(body);
+              if (!pin || !companionSessions.has(pin)) {
+                res.statusCode = 404;
+                return res.end(JSON.stringify({ error: 'Invalid PIN' }));
+              }
+              const session = companionSessions.get(pin);
+              session.status = 'ready';
+              session.data = data;
+              res.setHeader('Content-Type', 'application/json');
+              return res.end(JSON.stringify({ success: true }));
+            } catch (err: any) {
+              res.statusCode = 400;
+              return res.end(JSON.stringify({ error: err.message }));
+            }
+          });
+          return;
+        }
+
+        if (req.url.startsWith('/api/companion/poll')) {
+          const parsed = new URL(req.url, 'http://localhost');
+          const pin = parsed.searchParams.get('pin');
+          if (!pin || !companionSessions.has(pin)) {
+            res.statusCode = 404;
+            return res.end(JSON.stringify({ error: 'Invalid PIN' }));
+          }
+          const session = companionSessions.get(pin);
+          if (session.status === 'ready') {
+            const data = session.data;
+            companionSessions.delete(pin);
+            res.setHeader('Content-Type', 'application/json');
+            return res.end(JSON.stringify({ status: 'completed', data }));
+          }
+          res.setHeader('Content-Type', 'application/json');
+          return res.end(JSON.stringify({ status: 'waiting' }));
+        }
+
         if (!req.url.startsWith('/proxy')) {
           return next();
         }

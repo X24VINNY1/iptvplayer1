@@ -4,6 +4,7 @@ import { useAuthStore } from '@/store/useAuthStore';
 import { useContentStore } from '@/store/useContentStore';
 import { useCategoryStore } from '@/store/useCategoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
+import { useTVRemote } from '@/hooks/useTVRemote';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import MovieCard from '@/components/cards/MovieCard';
 import LoadingSpinner from '@/components/ui/LoadingSpinner';
@@ -11,7 +12,18 @@ import ErrorMessage from '@/components/ui/ErrorMessage';
 import Modal from '@/components/ui/Modal';
 import FavoriteButton from '@/components/ui/FavoriteButton';
 import CategoryManagerModal from '@/components/ui/CategoryManagerModal';
-import { Play, Star, Clock, Calendar, Info, SlidersHorizontal, Sparkles } from 'lucide-react';
+import {
+  Play,
+  Star,
+  Clock,
+  Calendar,
+  Info,
+  SlidersHorizontal,
+  Sparkles,
+  LayoutGrid,
+  Film,
+  Search
+} from 'lucide-react';
 import { VodStream, VodInfo } from '@/types';
 
 const MoviesPage: React.FC = () => {
@@ -25,10 +37,17 @@ const MoviesPage: React.FC = () => {
   const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  
+
+  // OwnTV-inspired View Mode: 'cinematic' vs 'grid'
+  const [viewMode, setViewMode] = useState<'cinematic' | 'grid'>('cinematic');
+  const [focusedMovie, setFocusedMovie] = useState<VodStream | null>(null);
+  const [movieSearch, setMovieSearch] = useState('');
+
   const [selectedMovie, setSelectedMovie] = useState<VodStream | null>(null);
   const [movieInfo, setMovieInfo] = useState<VodInfo | null>(null);
   const [infoLoading, setInfoLoading] = useState(false);
+
+  useTVRemote();
 
   useEffect(() => {
     if (connectionType === 'm3u') return;
@@ -51,7 +70,7 @@ const MoviesPage: React.FC = () => {
     return getVisibleCategories('vod', vodCategories);
   }, [vodCategories, getVisibleCategories]);
 
-  // Filter movies: only show movies from visible categories
+  // Filter movies
   const filteredMovies = useMemo(() => {
     const hiddenSet = new Set(
       vodCategories.filter((c) => isCategoryHidden('vod', c.category_id)).map((c) => c.category_id)
@@ -63,8 +82,22 @@ const MoviesPage: React.FC = () => {
       movies = movies.filter((m) => m.category_id === selectedCategory);
     }
 
+    if (movieSearch.trim()) {
+      const q = movieSearch.toLowerCase();
+      movies = movies.filter((m) => m.name.toLowerCase().includes(q));
+    }
+
     return movies;
-  }, [vodStreams, vodCategories, selectedCategory, isCategoryHidden]);
+  }, [vodStreams, vodCategories, selectedCategory, movieSearch, isCategoryHidden]);
+
+  // Default focused movie to first in list
+  useEffect(() => {
+    if (!focusedMovie && filteredMovies.length > 0) {
+      setFocusedMovie(filteredMovies[0]);
+    } else if (focusedMovie && !filteredMovies.find((m) => m.stream_id === focusedMovie.stream_id)) {
+      setFocusedMovie(filteredMovies[0] || null);
+    }
+  }, [filteredMovies, focusedMovie]);
 
   const handleMovieClick = async (movie: VodStream) => {
     setSelectedMovie(movie);
@@ -87,10 +120,15 @@ const MoviesPage: React.FC = () => {
     setMovieInfo(null);
   };
 
-  const handlePlay = () => {
-    if (selectedMovie) {
-      const ext = selectedMovie.container_extension || 'mp4';
-      navigate(`/player/vod/${selectedMovie.stream_id}?ext=${encodeURIComponent(ext)}&name=${encodeURIComponent(selectedMovie.name)}&icon=${encodeURIComponent(selectedMovie.stream_icon || '')}`);
+  const handlePlay = (movieToPlay?: VodStream) => {
+    const target = movieToPlay || selectedMovie || focusedMovie;
+    if (target) {
+      const ext = target.container_extension || 'mp4';
+      navigate(
+        `/player/vod/${target.stream_id}?ext=${encodeURIComponent(ext)}&name=${encodeURIComponent(
+          target.name
+        )}&icon=${encodeURIComponent(target.stream_icon || '')}`
+      );
     }
   };
 
@@ -103,7 +141,9 @@ const MoviesPage: React.FC = () => {
       <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center p-6 text-center">
         <Info className="w-16 h-16 text-gray-500 mb-4" />
         <h2 className="text-2xl font-bold text-white mb-2">Movies Not Available</h2>
-        <p className="text-gray-400 max-w-md">Your current connection is via M3U playlist. VOD and Series are only fully supported with Xtream Codes connections.</p>
+        <p className="text-gray-400 max-w-md">
+          Your current connection is via M3U playlist. VOD is supported with Xtream Codes connections.
+        </p>
       </div>
     );
   }
@@ -121,22 +161,51 @@ const MoviesPage: React.FC = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col">
-      {/* Header & Filter Controls */}
+    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+      {/* Header & Controls */}
       <div className="flex-none pt-4 px-6 pb-2 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
-        <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
-            <h1 className="text-2xl font-bold text-white">Movies / VOD</h1>
+            <h1 className="text-2xl font-bold text-white flex items-center gap-2">
+              Movies / VOD
+            </h1>
             <p className="text-xs text-gray-400 mt-0.5">
               Showing {filteredMovies.length} movies across {visibleCategories.length} categories
             </p>
           </div>
 
           <div className="flex items-center gap-2">
+            {/* View Mode Toggle */}
+            <div className="flex bg-gray-900 border border-gray-800 rounded-lg p-0.5">
+              <button
+                onClick={() => setViewMode('cinematic')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'cinematic'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Cinematic Hero Backdrop Mode (OwnTV style)"
+              >
+                <Film className="w-3.5 h-3.5" />
+                Cinematic
+              </button>
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all ${
+                  viewMode === 'grid'
+                    ? 'bg-indigo-600 text-white shadow-sm'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+                title="Standard Poster Grid"
+              >
+                <LayoutGrid className="w-3.5 h-3.5" />
+                Grid
+              </button>
+            </div>
+
             <button
               onClick={handleQuickUsFilter}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 transition-colors"
-              title="Automatically hide foreign categories and keep only US / USA / EN"
             >
               <Sparkles className="w-3.5 h-3.5" />
               US / EN Only
@@ -145,7 +214,6 @@ const MoviesPage: React.FC = () => {
             <button
               onClick={() => setIsCategoryModalOpen(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-colors"
-              title="Organize and hide unwanted movie categories"
             >
               <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
               Organize
@@ -160,127 +228,227 @@ const MoviesPage: React.FC = () => {
         />
       </div>
 
-      {/* Movies Grid */}
-      <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-        {filteredMovies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center">
-            <p className="text-base font-medium mb-2">No movies found in this view.</p>
-            <p className="text-xs text-gray-500 max-w-sm mb-4">
-              Categories may be hidden by your filter settings.
-            </p>
-            <button
-              onClick={() => setIsCategoryModalOpen(true)}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-indigo-400 rounded-lg text-xs font-semibold"
-            >
-              Open Category Manager
-            </button>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-20">
-            {filteredMovies.map((movie) => (
-              <MovieCard
-                key={movie.stream_id}
-                movie={movie}
-                onClick={() => handleMovieClick(movie)}
+      {/* Main View Area */}
+      {viewMode === 'cinematic' ? (
+        /* OwnTV Signature Cinematic Layout */
+        <div className="flex-1 flex flex-col overflow-hidden">
+          {/* Hero Backdrop Banner */}
+          {focusedMovie ? (
+            <div className="relative flex-none h-72 sm:h-80 md:h-96 w-full overflow-hidden border-b border-gray-800/80">
+              {/* High-res backdrop or fallback to stream icon */}
+              <div
+                className="absolute inset-0 bg-cover bg-center filter blur-[1px] transform scale-105 transition-all duration-700 opacity-40"
+                style={{
+                  backgroundImage: `url(${focusedMovie.stream_icon || ''})`,
+                }}
               />
-            ))}
+              <div className="absolute inset-0 bg-gradient-to-r from-gray-950 via-gray-950/80 to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-black/40" />
+
+              {/* Foreground Hero Content */}
+              <div className="relative h-full max-w-5xl p-6 sm:p-8 flex flex-col justify-end z-10 space-y-3">
+                <div className="flex items-center gap-2">
+                  <span className="px-2.5 py-0.5 bg-indigo-600/90 text-white text-[11px] font-bold rounded-md uppercase tracking-wider">
+                    Featured
+                  </span>
+                  {focusedMovie.rating && (
+                    <span className="flex items-center gap-1 px-2 py-0.5 bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-md text-xs font-bold">
+                      <Star className="w-3 h-3 fill-current" />
+                      {parseFloat(focusedMovie.rating).toFixed(1)}
+                    </span>
+                  )}
+                  {focusedMovie.container_extension && (
+                    <span className="px-2 py-0.5 bg-gray-800/80 text-gray-300 rounded text-xs uppercase font-mono">
+                      {focusedMovie.container_extension}
+                    </span>
+                  )}
+                </div>
+
+                <h2 className="text-2xl sm:text-4xl font-black text-white tracking-tight leading-tight line-clamp-2 drop-shadow-md">
+                  {focusedMovie.name}
+                </h2>
+
+                <p className="text-xs sm:text-sm text-gray-300 max-w-2xl line-clamp-2 drop-shadow">
+                  High-definition on-demand streaming. Instant zero-lag playback with native audio decoders and full seek support.
+                </p>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    onClick={() => handlePlay(focusedMovie)}
+                    className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold rounded-xl text-sm shadow-xl shadow-indigo-600/30 hover:scale-105 active:scale-95 transition-all"
+                  >
+                    <Play className="w-4 h-4 fill-current" />
+                    Play Now
+                  </button>
+
+                  <button
+                    onClick={() => handleMovieClick(focusedMovie)}
+                    className="flex items-center gap-2 px-4 py-2.5 bg-gray-900/80 hover:bg-gray-800 text-gray-200 font-semibold rounded-xl text-sm border border-gray-700/80 transition-all"
+                  >
+                    <Info className="w-4 h-4 text-indigo-400" />
+                    Details
+                  </button>
+
+                  <FavoriteButton
+                    type="vod"
+                    streamId={focusedMovie.stream_id}
+                    name={focusedMovie.name}
+                    icon={focusedMovie.stream_icon || ''}
+                    categoryId={focusedMovie.category_id}
+                    className="p-2.5 bg-gray-900/80 border border-gray-700/80 rounded-xl text-gray-300 hover:text-white"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* Bottom Movie Poster Strip / Grid */}
+          <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-16">
+              {filteredMovies.map((movie) => {
+                const isFocused = focusedMovie?.stream_id === movie.stream_id;
+                return (
+                  <div
+                    key={movie.stream_id}
+                    onMouseEnter={() => setFocusedMovie(movie)}
+                    onClick={() => {
+                      setFocusedMovie(movie);
+                      handleMovieClick(movie);
+                    }}
+                    className={`cursor-pointer transition-all transform duration-200 ${
+                      isFocused ? 'scale-105 ring-2 ring-indigo-500 z-10 rounded-xl' : 'hover:scale-102 opacity-90 hover:opacity-100'
+                    }`}
+                  >
+                    <MovieCard movie={movie} onClick={() => {}} />
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        /* Classic Grid Mode */
+        <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+          {filteredMovies.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center">
+              <p className="text-base font-medium mb-2">No movies found in this view.</p>
+              <button
+                onClick={() => setIsCategoryModalOpen(true)}
+                className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-indigo-400 rounded-lg text-xs font-semibold"
+              >
+                Open Category Manager
+              </button>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-4 pb-20">
+              {filteredMovies.map((movie) => (
+                <MovieCard
+                  key={movie.stream_id}
+                  movie={movie}
+                  onClick={() => handleMovieClick(movie)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Movie Details Modal */}
-      <Modal isOpen={!!selectedMovie} onClose={closeModal} size="xl">
-        {selectedMovie && (
-          <div className="flex flex-col md:flex-row gap-6 max-w-4xl mx-auto p-2">
-            <div className="w-full md:w-1/3 flex-shrink-0">
-              {selectedMovie.stream_icon ? (
-                <img 
-                  src={selectedMovie.stream_icon} 
-                  alt={selectedMovie.name} 
-                  className="w-full rounded-xl shadow-2xl object-cover aspect-[2/3]"
-                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
-                />
-              ) : (
-                <div className="w-full aspect-[2/3] bg-gray-800 rounded-xl flex items-center justify-center">
-                  <span className="text-gray-500">No Image</span>
-                </div>
-              )}
-            </div>
-            
-            <div className="flex-1 flex flex-col pt-2">
-              <div className="flex justify-between items-start">
-                <h2 className="text-3xl font-bold text-white mb-2">{selectedMovie.name}</h2>
-                <FavoriteButton 
-                  type="vod" 
-                  streamId={selectedMovie.stream_id} 
-                  name={selectedMovie.name} 
-                  icon={selectedMovie.stream_icon || ''} 
-                  categoryId={selectedMovie.category_id} 
+      {selectedMovie && (
+        <Modal isOpen={!!selectedMovie} onClose={closeModal} title={selectedMovie.name}>
+          <div className="flex flex-col md:flex-row gap-6">
+            <div className="w-full md:w-1/3 flex-shrink-0 flex flex-col items-center">
+              <img
+                src={selectedMovie.stream_icon || 'https://via.placeholder.com/300x450?text=No+Poster'}
+                alt={selectedMovie.name}
+                className="w-full max-w-[200px] md:max-w-none rounded-xl shadow-lg border border-gray-800 object-cover"
+                onError={(e) => {
+                  (e.target as HTMLElement).setAttribute('src', 'https://via.placeholder.com/300x450?text=No+Poster');
+                }}
+              />
+              <div className="mt-4 flex gap-3 w-full">
+                <button
+                  onClick={() => handlePlay(selectedMovie)}
+                  className="flex-1 flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold rounded-xl text-sm shadow-lg shadow-indigo-600/30 transition-all"
+                >
+                  <Play className="w-4 h-4 fill-current" />
+                  Play Movie
+                </button>
+                <FavoriteButton
+                  type="vod"
+                  streamId={selectedMovie.stream_id}
+                  name={selectedMovie.name}
+                  icon={selectedMovie.stream_icon || ''}
+                  categoryId={selectedMovie.category_id}
+                  className="p-3 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl"
                 />
               </div>
-              
-              <div className="flex flex-wrap gap-4 text-sm text-gray-400 mb-6">
-                {(selectedMovie.rating || movieInfo?.info?.rating) && (
-                  <div className="flex items-center text-yellow-500">
-                    <Star className="w-4 h-4 mr-1 fill-current" />
-                    <span>{movieInfo?.info?.rating || selectedMovie.rating}</span>
+            </div>
+
+            <div className="flex-1 flex flex-col space-y-4">
+              <div className="flex flex-wrap gap-4 text-xs text-gray-400">
+                {selectedMovie.rating && (
+                  <div className="flex items-center gap-1 text-amber-400 font-bold">
+                    <Star className="w-4 h-4 fill-current" />
+                    <span>{parseFloat(selectedMovie.rating).toFixed(1)} / 10</span>
                   </div>
                 )}
                 {movieInfo?.info?.releasedate && (
-                  <div className="flex items-center">
-                    <Calendar className="w-4 h-4 mr-1" />
+                  <div className="flex items-center gap-1">
+                    <Calendar className="w-4 h-4" />
                     <span>{movieInfo.info.releasedate}</span>
                   </div>
                 )}
                 {movieInfo?.info?.duration && (
-                  <div className="flex items-center">
-                    <Clock className="w-4 h-4 mr-1" />
+                  <div className="flex items-center gap-1">
+                    <Clock className="w-4 h-4" />
                     <span>{movieInfo.info.duration}</span>
                   </div>
                 )}
-                {movieInfo?.info?.genre && (
-                  <div className="bg-gray-800 px-2 py-0.5 rounded text-gray-300">
-                    {movieInfo.info.genre}
+              </div>
+
+              {movieInfo?.info?.genre && (
+                <div className="flex flex-wrap gap-1.5">
+                  {movieInfo.info.genre.split(',').map((g, i) => (
+                    <span
+                      key={i}
+                      className="px-2.5 py-0.5 bg-gray-800/80 text-gray-300 rounded-md text-xs"
+                    >
+                      {g.trim()}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <div className="border-t border-gray-800 pt-3">
+                <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                  Plot Synopsis
+                </h4>
+                {infoLoading ? (
+                  <div className="flex items-center gap-2 text-xs text-gray-500 py-4">
+                    <LoadingSpinner size="sm" /> Loading info...
                   </div>
+                ) : (
+                  <p className="text-xs text-gray-300 leading-relaxed max-h-40 overflow-y-auto">
+                    {movieInfo?.info?.plot || 'No detailed plot summary available for this title.'}
+                  </p>
                 )}
               </div>
 
-              {infoLoading ? (
-                <div className="py-8"><LoadingSpinner size="sm" /></div>
-              ) : (
-                <>
-                  <p className="text-gray-300 mb-6 leading-relaxed">
-                    {movieInfo?.info?.plot || "No description available."}
+              {movieInfo?.info?.cast && (
+                <div className="border-t border-gray-800 pt-3">
+                  <h4 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-1">
+                    Cast
+                  </h4>
+                  <p className="text-xs text-gray-400 leading-relaxed line-clamp-2">
+                    {movieInfo.info.cast}
                   </p>
-
-                  {movieInfo?.info?.director && (
-                    <div className="mb-2 text-sm">
-                      <span className="text-gray-500">Director: </span>
-                      <span className="text-gray-300">{movieInfo.info.director}</span>
-                    </div>
-                  )}
-                  {movieInfo?.info?.cast && (
-                    <div className="mb-6 text-sm">
-                      <span className="text-gray-500">Cast: </span>
-                      <span className="text-gray-300">{movieInfo.info.cast}</span>
-                    </div>
-                  )}
-                </>
+                </div>
               )}
-
-              <div className="mt-auto pt-6 flex gap-4">
-                <button
-                  onClick={handlePlay}
-                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-semibold py-3 px-6 rounded-xl flex items-center justify-center transition-colors shadow-lg shadow-indigo-600/20"
-                >
-                  <Play className="w-5 h-5 mr-2 fill-current" />
-                  Play Movie
-                </button>
-              </div>
             </div>
           </div>
-        )}
-      </Modal>
+        </Modal>
+      )}
 
       {/* Category Manager Modal */}
       <CategoryManagerModal

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
-import { Home, Radio, Film, Tv, Heart, Settings, LogOut, Play } from 'lucide-react';
+import { Home, Radio, Film, Tv, Heart, Settings, LogOut, Play, Grid } from 'lucide-react';
 import { useAuthStore } from '@/store/useAuthStore';
 
 interface SidebarProps {
@@ -15,6 +15,7 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   const navItems = [
     { name: 'Home', path: '/', icon: Home },
     { name: 'Live TV', path: '/live', icon: Radio },
+    { name: 'Multi-View', path: '/multiview', icon: Grid },
     { name: 'Movies', path: '/movies', icon: Film },
     { name: 'Series', path: '/series', icon: Tv },
     { name: 'Favorites', path: '/favorites', icon: Heart },

@@ -5,7 +5,8 @@ import { useCategoryStore } from '@/store/useCategoryStore';
 import AccountManager from '@/components/accounts/AccountManager';
 import CategoryManagerModal from '@/components/ui/CategoryManagerModal';
 import { formatDate } from '@/utils/format';
-import { Server, User, Clock, Activity, Shield, Tv, Info, Globe, SlidersHorizontal, Sparkles, Film, Radio } from 'lucide-react';
+import { Server, User, Clock, Activity, Shield, Tv, Info, Globe, SlidersHorizontal, Sparkles, Film, Radio, Smartphone, Wifi } from 'lucide-react';
+import CompanionModal from '@/components/companion/CompanionModal';
 
 import { useSettingsStore, VideoPlayerEngine } from '@/store/useSettingsStore';
 
@@ -16,6 +17,8 @@ const SettingsPage: React.FC = () => {
   const { preferredPlayer, setPreferredPlayer } = useSettingsStore();
 
   const [activeModalType, setActiveModalType] = useState<'live' | 'vod' | 'series' | null>(null);
+  const [isCompanionOpen, setIsCompanionOpen] = useState(false);
+  const [dnsMode, setDnsMode] = useState<'cloudflare' | 'quad9' | 'default'>('cloudflare');
 
   const isXtream = connectionType === 'xtream';
 
@@ -347,6 +350,107 @@ const SettingsPage: React.FC = () => {
         <AccountManager />
       </section>
 
+      {/* TV Companion & Phone Pairing */}
+      <section>
+        <div className="mb-6 border-b border-gray-800 pb-4">
+          <h2 className="text-2xl font-bold text-white flex items-center">
+            <Smartphone className="w-6 h-6 mr-2 text-indigo-500" />
+            TV Remote Companion (Wi-Fi Pairing)
+          </h2>
+          <p className="text-gray-400 mt-2 text-sm">
+            Control or transfer playlists from your phone to this TV device over local Wi-Fi.
+          </p>
+        </div>
+
+        <div className="bg-gray-900/50 rounded-2xl p-6 border border-gray-800 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div>
+            <h3 className="text-base font-bold text-white">Connect Smartphone</h3>
+            <p className="text-xs text-gray-400 mt-1 max-w-md">
+              Generates a temporary 4-digit PIN and QR code. Open on your mobile phone to easily type IPTV credentials or upload M3U files without typing on the TV remote.
+            </p>
+          </div>
+          <button
+            onClick={() => setIsCompanionOpen(true)}
+            className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/30 transition-all flex-shrink-0"
+          >
+            <Smartphone className="w-4 h-4" />
+            Launch Phone Pairing
+          </button>
+        </div>
+      </section>
+
+      {/* Custom DNS-over-HTTPS (DoH) Bypass */}
+      <section>
+        <div className="mb-6 border-b border-gray-800 pb-4">
+          <h2 className="text-2xl font-bold text-white flex items-center">
+            <Wifi className="w-6 h-6 mr-2 text-indigo-500" />
+            Custom DNS-over-HTTPS (ISP Censorship Bypass)
+          </h2>
+          <p className="text-gray-400 mt-2 text-sm">
+            Route streaming DNS queries through encrypted DoH resolvers to circumvent ISP blocks and regional throttling.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div
+            onClick={() => setDnsMode('cloudflare')}
+            className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              dnsMode === 'cloudflare'
+                ? 'bg-indigo-600/20 border-indigo-500 shadow-md ring-1 ring-indigo-500'
+                : 'bg-gray-900/50 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-white">Cloudflare DoH</span>
+              {dnsMode === 'cloudflare' && (
+                <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">1.1.1.1 encrypted DNS. Ultra-fast lookup, zero logs.</p>
+          </div>
+
+          <div
+            onClick={() => setDnsMode('quad9')}
+            className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              dnsMode === 'quad9'
+                ? 'bg-indigo-600/20 border-indigo-500 shadow-md ring-1 ring-indigo-500'
+                : 'bg-gray-900/50 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-white">Quad9 DoH</span>
+              {dnsMode === 'quad9' && (
+                <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">9.9.9.9 privacy-first encrypted DNS with threat protection.</p>
+          </div>
+
+          <div
+            onClick={() => setDnsMode('default')}
+            className={`p-4 rounded-xl border cursor-pointer transition-all ${
+              dnsMode === 'default'
+                ? 'bg-indigo-600/20 border-indigo-500 shadow-md ring-1 ring-indigo-500'
+                : 'bg-gray-900/50 border-gray-800 hover:border-gray-700'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-bold text-white">System Default</span>
+              {dnsMode === 'default' && (
+                <span className="text-[10px] bg-indigo-600 text-white px-2 py-0.5 rounded-full font-bold uppercase">
+                  Active
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-400">Standard operating system DNS configuration.</p>
+          </div>
+        </div>
+      </section>
+
       {/* About */}
       <section>
         <div className="mb-6 border-b border-gray-800 pb-4">
@@ -394,6 +498,11 @@ const SettingsPage: React.FC = () => {
           categories={seriesCategories}
         />
       )}
+
+      <CompanionModal
+        isOpen={isCompanionOpen}
+        onClose={() => setIsCompanionOpen(false)}
+      />
     </div>
   );
 };

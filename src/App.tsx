@@ -14,6 +14,8 @@ import FavoritesPage from '@/pages/FavoritesPage';
 import SearchPage from '@/pages/SearchPage';
 import SettingsPage from '@/pages/SettingsPage';
 import PlayerPage from '@/pages/PlayerPage';
+import ConnectPage from '@/pages/ConnectPage';
+import MultiViewPage from '@/pages/MultiViewPage';
 
 const App = () => {
   const { isAuthenticated } = useAuthStore();
@@ -26,11 +28,15 @@ const App = () => {
             path="/login" 
             element={!isAuthenticated ? <LoginPage /> : <Navigate to="/" replace />} 
           />
+
+          {/* TV Companion Pairing Route for Phone */}
+          <Route path="/connect" element={<ConnectPage />} />
           
           {/* Protected Routes */}
           <Route element={isAuthenticated ? <AppLayout /> : <Navigate to="/login" replace />}>
             <Route path="/" element={<DashboardPage />} />
             <Route path="/live" element={<LiveTVPage />} />
+            <Route path="/multiview" element={<MultiViewPage />} />
             <Route path="/movies" element={<MoviesPage />} />
             <Route path="/series" element={<SeriesPage />} />
             <Route path="/series/:seriesId" element={<SeriesDetailPage />} />

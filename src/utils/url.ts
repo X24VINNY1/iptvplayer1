@@ -85,3 +85,5 @@ export const getStreamPlaybackUrl = (rawUrl: string, mode?: 'proxy' | 'direct'):
   // fetches the Xtream URL and sends the video stream directly to the website
   return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
 };
+
+export const getProxiedStreamUrl = getStreamPlaybackUrl;
