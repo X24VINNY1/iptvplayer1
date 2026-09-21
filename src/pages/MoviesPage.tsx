@@ -89,10 +89,8 @@ const MoviesPage: React.FC = () => {
 
   const handlePlay = () => {
     if (selectedMovie) {
-      const rawExt = selectedMovie.container_extension || 'mp4';
-      // Normalize mkv/avi to mp4 for universal HTML5 browser decoder support
-      const ext = (rawExt === 'mkv' || rawExt === 'avi' || rawExt === 'undefined') ? 'mp4' : rawExt;
-      navigate(`/player/vod/${selectedMovie.stream_id}?ext=${ext}&name=${encodeURIComponent(selectedMovie.name)}&icon=${encodeURIComponent(selectedMovie.stream_icon || '')}`);
+      const ext = selectedMovie.container_extension || 'mp4';
+      navigate(`/player/vod/${selectedMovie.stream_id}?ext=${encodeURIComponent(ext)}&name=${encodeURIComponent(selectedMovie.name)}&icon=${encodeURIComponent(selectedMovie.stream_icon || '')}`);
     }
   };
 

@@ -36,8 +36,8 @@ export default function VideoPlayer({
   const [slowBufferHint, setSlowBufferHint] = useState(false);
   const hideControlsTimeout = useRef<NodeJS.Timeout | null>(null);
 
-  // Hook up video player engine & events
-  const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay);
+  // Hook up video player engine & events with auto-healing format fallback
+  const { retry, flushAndResync } = useVideoPlayer(videoRef, src, type, autoPlay, onFormatFallback);
 
   const {
     isPlaying,
@@ -194,6 +194,7 @@ export default function VideoPlayer({
         ref={videoRef}
         className="w-full h-full object-contain cursor-pointer bg-black"
         playsInline
+        crossOrigin="anonymous"
         preload="auto"
         onClick={() => {
           if (videoRef.current) {

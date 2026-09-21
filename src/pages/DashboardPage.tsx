@@ -75,9 +75,8 @@ const DashboardPage: React.FC = () => {
   };
 
   const handleMovieClick = (movie: VodStream) => {
-    const rawExt = movie.container_extension || 'mp4';
-    const ext = (rawExt === 'mkv' || rawExt === 'avi' || rawExt === 'undefined') ? 'mp4' : rawExt;
-    navigate(`/player/vod/${movie.stream_id}?ext=${ext}&name=${encodeURIComponent(movie.name)}&icon=${encodeURIComponent(movie.stream_icon || '')}`);
+    const ext = movie.container_extension || 'mp4';
+    navigate(`/player/vod/${movie.stream_id}?ext=${encodeURIComponent(ext)}&name=${encodeURIComponent(movie.name)}&icon=${encodeURIComponent(movie.stream_icon || '')}`);
   };
 
   const handleSeriesClick = (seriesItem: Series) => {

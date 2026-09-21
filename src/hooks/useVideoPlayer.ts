@@ -7,7 +7,8 @@ export function useVideoPlayer(
   videoRef: React.RefObject<HTMLVideoElement>,
   src: string | null,
   type: 'live' | 'vod' | 'series' = 'vod',
-  autoPlay: boolean = true
+  autoPlay: boolean = true,
+  onAutoFallbackFormat?: () => void
 ) {
   const {
     setIsPlaying,
@@ -31,6 +32,12 @@ export function useVideoPlayer(
   const stallCounterRef = useRef<number>(0);
   const blobUrlRef = useRef<string | null>(null);
   const bufferingWatchdogRef = useRef<NodeJS.Timeout | null>(null);
+  const autoFallbackTriggeredRef = useRef<boolean>(false);
+
+  // Reset auto-fallback latch whenever source changes
+  useEffect(() => {
+    autoFallbackTriggeredRef.current = false;
+  }, [src]);
 
   const clearBufferingWatchdog = useCallback(() => {
     if (bufferingWatchdogRef.current) {
@@ -75,20 +82,19 @@ export function useVideoPlayer(
     }
   }, [videoRef, clearBufferingWatchdog]);
 
-  // Fast-reacting HLS config tuned for low latency
+  // Fast-reacting HLS config tuned for universal codec detection & zero lag
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
-    const baseConfig = {
+    const baseConfig: Partial<Hls['config']> = {
       enableWorker: true,
       capLevelToPlayerSize: true,
-      defaultAudioCodec: 'mp4a.40.2',
+      // No hardcoded defaultAudioCodec to allow AAC, AC3, EAC3, and MP3 auto-detection
       maxBufferHole: 0.8,
-      maxSeekHole: 2,
       nudgeOffset: 0.2,
       nudgeMaxRetry: 8,
       maxFragLookUpTolerance: 0.3,
-      fragLoadingTimeOut: 10000,
-      manifestLoadingTimeOut: 8000,
-      levelLoadingTimeOut: 8000,
+      fragLoadingTimeOut: 12000,
+      manifestLoadingTimeOut: 10000,
+      levelLoadingTimeOut: 10000,
       xhrSetup: (xhr: XMLHttpRequest) => {
         xhr.withCredentials = false;
       }
@@ -147,25 +153,39 @@ export function useVideoPlayer(
 
     video.volume = volume;
     video.muted = isMuted;
+    video.crossOrigin = 'anonymous';
+    video.playsInline = true;
 
-    // Buffering Watchdog: if stream doesn't produce playback within 8s, stop the infinite spinning
+    // Buffering Watchdog: kicks decoder if idle, provides seamless fallback
     clearBufferingWatchdog();
     bufferingWatchdogRef.current = setTimeout(() => {
       if (video && video.paused && video.readyState < 2) {
-        console.warn('[OnyxStream Watchdog] Initial stream buffering taking longer than expected.');
+        console.warn('[OnyxStream Watchdog] Initial stream buffering taking longer than expected. Kicking loader...');
         if (hlsRef.current) {
           hlsRef.current.startLoad(0);
+        } else if (mpegtsPlayerRef.current) {
+          mpegtsPlayerRef.current.load();
         }
+        if (autoPlay) {
+          video.play().catch(console.warn);
+        }
+
         setTimeout(() => {
           if (video && video.paused && video.readyState < 2) {
+            if (!autoFallbackTriggeredRef.current && onAutoFallbackFormat) {
+              autoFallbackTriggeredRef.current = true;
+              console.log('[OnyxStream Auto-Healing] Stream buffering timeout, auto-switching format...');
+              onAutoFallbackFormat();
+              return;
+            }
             setIsLoading(false);
             setError(
               'Stream connection is taking longer than usual. Use "Switch Route" or "Switch Format" below to reconnect.'
             );
           }
-        }, 3500);
+        }, 4500);
       }
-    }, 7000);
+    }, 6000);
 
     const onPlaybackStarted = () => {
       clearBufferingWatchdog();
@@ -229,16 +249,40 @@ export function useVideoPlayer(
       onPlaybackStarted();
     };
 
-    // Video element error handler
+    // Forward declaration of engine starters for clean multi-engine fallback
+    let startHlsEngine: (streamUrl: string) => boolean;
+    let startMpegtsEngine: (streamUrl: string) => boolean;
+    let startDirectEngine: (streamUrl: string) => void;
+
+    // Video element error handler with automatic multi-tier fallback
     video.onerror = () => {
       clearBufferingWatchdog();
       const err = video.error;
       console.warn('[OnyxStream] Video error:', err?.code, err?.message);
 
+      // 1. Try HLS media error recovery if active
       if (hlsRef.current && mediaRecoveriesRef.current < 2) {
         mediaRecoveriesRef.current += 1;
         hlsRef.current.recoverMediaError();
         return;
+      }
+
+      // 2. Automatic format auto-healing before giving up
+      if (err?.code === 4 && !autoFallbackTriggeredRef.current && onAutoFallbackFormat) {
+        autoFallbackTriggeredRef.current = true;
+        console.log('[OnyxStream Auto-Healing] Codec error code 4, auto-switching format...');
+        onAutoFallbackFormat();
+        return;
+      }
+
+      // 3. For live streams, try swapping to mpegts if hls failed, or vice versa
+      if (type === 'live') {
+        if (hlsRef.current && typeof window !== 'undefined' && mpegts.isSupported()) {
+          console.log('[OnyxStream Multi-Engine] HLS failed on live stream, falling back to mpegts.js...');
+          cleanup();
+          startMpegtsEngine(src);
+          return;
+        }
       }
 
       let errorMsg = 'Playback Error: Stream format unsupported by browser decoder. Try switching format or connection route.';
@@ -252,18 +296,15 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
-    const isExplicitM3u8 = src.includes('.m3u8') || src.includes('m3u8');
-    const isRawTsStream = src.endsWith('.ts') || src.includes('.ts?') || (type === 'live' && !isExplicitM3u8);
-
-    // 1. Raw MPEG-TS Live Stream -> Handled by mpegts.js (low latency continuous demuxer)
-    if (isRawTsStream && typeof window !== 'undefined' && mpegts.isSupported()) {
+    startMpegtsEngine = (streamUrl: string): boolean => {
+      if (typeof window === 'undefined' || !mpegts.isSupported()) return false;
       try {
-        console.log('[OnyxStream Engine] Booting mpegts.js player for live stream:', src);
+        console.log('[OnyxStream Engine] Booting mpegts.js player for:', streamUrl);
         const player = mpegts.createPlayer(
           {
             type: 'mpegts',
-            isLive: true,
-            url: src,
+            isLive: type === 'live',
+            url: streamUrl,
           },
           {
             enableWorker: true,
@@ -280,6 +321,12 @@ export function useVideoPlayer(
 
         player.on(mpegts.Events.ERROR, (errType: string, errDetail: string) => {
           console.warn('[mpegts error]', errType, errDetail);
+          if (type === 'live' && Hls.isSupported()) {
+            console.log('[OnyxStream Multi-Engine] mpegts failed, falling back to HLS...');
+            cleanup();
+            startHlsEngine(streamUrl);
+            return;
+          }
           if (errType === mpegts.ErrorTypes.NETWORK_ERROR) {
             setError('Network Error: Stream server dropped connection. Tap "Switch Route" to retry.');
             setIsLoading(false);
@@ -289,95 +336,140 @@ export function useVideoPlayer(
         if (autoPlay) {
           player.play()?.catch((err: any) => console.warn('[mpegts autoplay wait]', err.message));
         }
-        return;
+        return true;
       } catch (err: any) {
-        console.warn('[mpegts boot failed, falling back to HLS]:', err.message);
+        console.warn('[mpegts boot failed]:', err.message);
+        return false;
       }
+    };
+
+    startHlsEngine = (streamUrl: string): boolean => {
+      if (!Hls.isSupported()) return false;
+      try {
+        console.log('[OnyxStream Engine] Booting Hls.js player for:', streamUrl);
+        const hlsConfig = getHlsConfig(antiLagMode);
+        const hls = new Hls(hlsConfig);
+        hlsRef.current = hls;
+
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          onPlaybackStarted();
+          networkErrorRetriesRef.current = 0;
+          if (autoPlay) {
+            video.play().catch((err) => {
+              console.warn('[OnyxStream] Autoplay prevented:', err.message);
+            });
+          }
+        });
+
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
+            if (antiLagEnabled) {
+              incrementLagRecovery();
+              hls.startLoad();
+            }
+            return;
+          }
+
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                networkErrorRetriesRef.current += 1;
+                if (networkErrorRetriesRef.current <= 2) {
+                  console.log(`[Anti-Lag] Network hiccup, reloading HLS (${networkErrorRetriesRef.current}/2)...`);
+                  hls.startLoad();
+                } else {
+                  // If live and HLS network keeps failing, try mpegts before erroring
+                  if (type === 'live' && typeof window !== 'undefined' && mpegts.isSupported()) {
+                    console.log('[OnyxStream Multi-Engine] HLS network failed, switching to mpegts...');
+                    cleanup();
+                    startMpegtsEngine(streamUrl);
+                    return;
+                  }
+                  clearBufferingWatchdog();
+                  setError('Network Error: Stream server did not respond. Tap "Switch Route" or "Retry".');
+                  setIsLoading(false);
+                }
+                break;
+
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                if (mediaRecoveriesRef.current < 2) {
+                  mediaRecoveriesRef.current += 1;
+                  console.log(`[Anti-Lag] Recovering media error (${mediaRecoveriesRef.current})...`);
+                  hls.recoverMediaError();
+                } else if (mediaRecoveriesRef.current === 2) {
+                  mediaRecoveriesRef.current += 1;
+                  console.log('[Anti-Lag] Swapping audio codec and recovering media...');
+                  hls.swapAudioCodec();
+                  hls.recoverMediaError();
+                } else {
+                  clearBufferingWatchdog();
+                  setError('Codec Error: Unsupported stream format. Try switching format.');
+                  setIsLoading(false);
+                }
+                break;
+
+              default:
+                console.warn('[Anti-Lag] Fatal HLS error:', data.details);
+                // If live and manifest parse fails, provider might be streaming raw MPEG-TS!
+                if (type === 'live' && typeof window !== 'undefined' && mpegts.isSupported()) {
+                  console.log('[OnyxStream Multi-Engine] HLS manifest error, trying mpegts demuxer...');
+                  cleanup();
+                  startMpegtsEngine(streamUrl);
+                  return;
+                }
+                clearBufferingWatchdog();
+                setError(`Playback notice: ${data.details}. Try switching connection route.`);
+                setIsLoading(false);
+                break;
+            }
+          }
+        });
+
+        return true;
+      } catch (err: any) {
+        console.warn('[Hls boot failed]:', err.message);
+        return false;
+      }
+    };
+
+    startDirectEngine = (streamUrl: string) => {
+      console.log('[OnyxStream Engine] Booting HTML5 direct player for:', streamUrl);
+      video.src = streamUrl;
+      video.load();
+      if (autoPlay) video.play().catch(console.warn);
+    };
+
+    const isExplicitM3u8 = src.includes('.m3u8') || src.includes('m3u8');
+    const isRawTsStream = src.endsWith('.ts') || src.includes('.ts?') || (type === 'live' && !isExplicitM3u8);
+
+    // Engine Selection Matrix:
+    // 1. Raw MPEG-TS Live Stream -> mpegts.js demuxer
+    if (isRawTsStream && mpegts.isSupported()) {
+      const ok = startMpegtsEngine(src);
+      if (ok) return;
     }
 
-    // 2. HLS Stream (.m3u8 playlist) -> Handled by Hls.js
+    // 2. HLS Stream (.m3u8) -> Hls.js
     if (isExplicitM3u8 && Hls.isSupported()) {
-      const hlsConfig = getHlsConfig(antiLagMode);
-      const hls = new Hls(hlsConfig);
-      hlsRef.current = hls;
-
-      hls.loadSource(src);
-      hls.attachMedia(video);
-
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
-        onPlaybackStarted();
-        networkErrorRetriesRef.current = 0;
-        if (autoPlay) {
-          video.play().catch((err) => {
-            console.warn('[OnyxStream] Autoplay prevented:', err.message);
-          });
-        }
-      });
-
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.details === Hls.ErrorDetails.BUFFER_STALLED_ERROR) {
-          if (antiLagEnabled) {
-            incrementLagRecovery();
-            hls.startLoad();
-          }
-          return;
-        }
-
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              networkErrorRetriesRef.current += 1;
-              if (networkErrorRetriesRef.current <= 2) {
-                console.log(`[Anti-Lag] Network hiccup, reloading HLS (${networkErrorRetriesRef.current}/2)...`);
-                hls.startLoad();
-              } else {
-                clearBufferingWatchdog();
-                setError('Network Error: Stream server did not respond. Tap "Switch Route" or "Retry".');
-                setIsLoading(false);
-              }
-              break;
-
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              if (mediaRecoveriesRef.current < 2) {
-                mediaRecoveriesRef.current += 1;
-                console.log(`[Anti-Lag] Recovering media error (${mediaRecoveriesRef.current})...`);
-                hls.recoverMediaError();
-              } else if (mediaRecoveriesRef.current === 2) {
-                mediaRecoveriesRef.current += 1;
-                console.log('[Anti-Lag] Swapping audio codec and recovering media...');
-                hls.swapAudioCodec();
-                hls.recoverMediaError();
-              } else {
-                clearBufferingWatchdog();
-                setError('Codec Error: Unsupported stream format. Try switching format.');
-                setIsLoading(false);
-              }
-              break;
-
-            default:
-              console.warn('[Anti-Lag] Fatal HLS error:', data.details);
-              clearBufferingWatchdog();
-              setError(`Playback notice: ${data.details}. Try switching connection route.`);
-              setIsLoading(false);
-              break;
-          }
-        }
-      });
+      const ok = startHlsEngine(src);
+      if (ok) return;
     } else if (isExplicitM3u8 && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native Apple Safari HLS
-      video.src = src;
-      video.load();
-      if (autoPlay) video.play().catch(console.warn);
-    } else {
-      // 3. Direct media playback (MP4, MKV, VOD direct files)
-      video.src = src;
-      video.load();
-      if (autoPlay) video.play().catch(console.warn);
+      startDirectEngine(src);
+      return;
     }
+
+    // 3. Direct HTML5 Media Playback (MP4, MKV, VOD files)
+    startDirectEngine(src);
+
   }, [
     src,
     type,
     autoPlay,
+    onAutoFallbackFormat,
     cleanup,
     volume,
     isMuted,

@@ -22,13 +22,13 @@ const PlayerPage: React.FC = () => {
   const { addToHistory, updateProgress } = useHistoryStore();
   const { currentTime, duration } = usePlayerStore();
 
-  // Smart default format extension
+  // Smart default format extension: preserve original container extension from server
   const defaultExt = type === 'live' ? 'm3u8' : 'mp4';
   const paramExt = searchParams.get('ext');
-  const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') ? paramExt : defaultExt;
-  // Normalize mkv/avi to mp4 for universal HTML5 browser decoder support
-  const normalizedExt = (type !== 'live' && (validExt === 'mkv' || validExt === 'avi')) ? 'mp4' : validExt;
-  const [currentExt, setCurrentExt] = useState<string>(normalizedExt);
+  const validExt = (paramExt && paramExt !== 'undefined' && paramExt !== 'null' && paramExt.trim() !== '') 
+    ? paramExt.toLowerCase() 
+    : defaultExt;
+  const [currentExt, setCurrentExt] = useState<string>(validExt);
 
   // Connection mode: Proxy by default on HTTPS web to bypass CORS/mixed content, Direct on Android/HTTP
   const initialMode: 'proxy' | 'direct' = 
@@ -121,7 +121,11 @@ const PlayerPage: React.FC = () => {
     if (type === 'live') {
       setCurrentExt(prev => (prev === 'm3u8' ? 'ts' : 'm3u8'));
     } else {
-      setCurrentExt(prev => (prev === 'mp4' ? 'm3u8' : 'mp4'));
+      setCurrentExt(prev => {
+        if (prev === 'mkv') return 'mp4';
+        if (prev === 'mp4') return 'm3u8';
+        return 'mp4';
+      });
     }
   };
 

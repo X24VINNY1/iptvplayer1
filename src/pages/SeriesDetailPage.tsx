@@ -54,9 +54,8 @@ const SeriesDetailPage: React.FC = () => {
 
   const handleEpisodeClick = (episode: Episode) => {
     if (!seriesInfo) return;
-    const rawExt = episode.container_extension || 'mp4';
-    const ext = (rawExt === 'mkv' || rawExt === 'avi' || rawExt === 'undefined') ? 'mp4' : rawExt;
-    navigate(`/player/series/${episode.id}?ext=${ext}&name=${encodeURIComponent(episode.title)}&icon=${encodeURIComponent(episode.info?.movie_image || '')}&season=${episode.season}&episode=${episode.episode_num}&seriesId=${seriesId}`);
+    const ext = episode.container_extension || 'mp4';
+    navigate(`/player/series/${episode.id}?ext=${encodeURIComponent(ext)}&name=${encodeURIComponent(episode.title)}&icon=${encodeURIComponent(episode.info?.movie_image || '')}&season=${episode.season}&episode=${episode.episode_num}&seriesId=${seriesId}`);
   };
 
   if (loading) {

@@ -30,7 +30,7 @@ app.get('/api/health', (req, res) => {
 });
 
 /**
- * Rewrites an M3U8 manifest content so all segment paths and nested playlists
+ * Rewrites an M3U8 manifest content so all segment paths, keys, and nested playlists
  * route cleanly through the same-origin /proxy endpoint over HTTPS with full CORS.
  */
 function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
@@ -40,6 +40,17 @@ function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
     if (!trimmed) return line;
 
     if (trimmed.startsWith('#EXT-X-MEDIA:') && trimmed.includes('URI="')) {
+      return line.replace(/URI="([^"]+)"/, (_, uri) => {
+        try {
+          const resolved = new URL(uri, baseUrl).toString();
+          return `URI="${proxyEndpoint}${encodeURIComponent(resolved)}"`;
+        } catch {
+          return `URI="${uri}"`;
+        }
+      });
+    }
+
+    if (trimmed.startsWith('#EXT-X-KEY:') && trimmed.includes('URI="')) {
       return line.replace(/URI="([^"]+)"/, (_, uri) => {
         try {
           const resolved = new URL(uri, baseUrl).toString();
@@ -66,11 +77,36 @@ function rewriteM3U8(content, baseUrl, proxyEndpoint = '/proxy?url=') {
 }
 
 /**
+ * Resolves the optimal browser-compatible MIME type so HTML5 video decoders don't reject the stream.
+ */
+function determineMimeType(rawMime, targetUrl, finalUrl) {
+  const low = (rawMime || '').toLowerCase();
+  if (low.includes('video/mp4') || low.includes('video/webm') || low.includes('video/ogg')) {
+    return low;
+  }
+  if (low.includes('video/mp2t')) {
+    return 'video/mp2t';
+  }
+  if (low.includes('mpegurl')) {
+    return 'application/vnd.apple.mpegurl; charset=utf-8';
+  }
+
+  const cleanUrl = (finalUrl || targetUrl || '').toLowerCase();
+  if (cleanUrl.includes('.ts')) return 'video/mp2t';
+  if (cleanUrl.includes('.mp4')) return 'video/mp4';
+  if (cleanUrl.includes('.mkv') || cleanUrl.includes('.avi') || cleanUrl.includes('.mov')) return 'video/mp4';
+  if (cleanUrl.includes('.webm')) return 'video/webm';
+  if (cleanUrl.includes('.m3u8')) return 'application/vnd.apple.mpegurl; charset=utf-8';
+  return 'video/mp4';
+}
+
+/**
  * Universal Zero-Lag Streaming Proxy
- * - Streams continuous live TS and binary video IMMEDIATELY via pipe without waiting for EOF
- * - Detects and rewrites M3U8 playlists on the fly
- * - Forwards 206 Partial Content and Range headers for smooth VOD seeking
- * - Tracks 302 redirects to find the exact streaming cluster
+ * - Inspects first chunk: if #EXTM3U text, buffers manifest and rewrites URLs
+ * - If binary video (MPEG-TS, MP4, MKV), pipes IMMEDIATELY without waiting for EOF
+ * - Eliminates infinite buffering on live TS streams
+ * - Normalizes MIME types so browser decoder never triggers MEDIA_ERR_SRC_NOT_SUPPORTED
+ * - Forwards 206 Partial Content & Range headers for seamless VOD seeking
  */
 const handleProxyRequest = async (req, res) => {
   const targetUrl = req.query.url;
@@ -81,7 +117,8 @@ const handleProxyRequest = async (req, res) => {
   const outgoingHeaders = {
     'User-Agent': 'VLC/3.0.18 LibVLC/3.0.18 (Linux; Android 10)',
     'Accept': '*/*',
-    'Connection': 'keep-alive'
+    'Connection': 'keep-alive',
+    'Icy-MetaData': '1'
   };
 
   if (req.headers.range) {
@@ -99,60 +136,88 @@ const handleProxyRequest = async (req, res) => {
       validateStatus: (status) => status < 400
     });
 
-    const contentType = (upstreamResponse.headers['content-type'] || '').toLowerCase();
-    const isExplicitM3u8 = targetUrl.toLowerCase().includes('.m3u8') || targetUrl.toLowerCase().includes('m3u8');
-    const isM3u8ContentType = contentType.includes('mpegurl') || contentType.includes('application/x-mpegurl');
+    const finalUrl = upstreamResponse.request?.res?.responseUrl || targetUrl;
+    const stream = upstreamResponse.data;
 
-    if (isExplicitM3u8 || isM3u8ContentType) {
-      // Manifest request: read text, rewrite URLs, and send
-      let manifestText = '';
-      upstreamResponse.data.setEncoding('utf-8');
-      upstreamResponse.data.on('data', (chunk) => {
-        manifestText += chunk;
-      });
+    let hasDecided = false;
+    let isManifest = false;
+    let manifestBuffer = '';
 
-      upstreamResponse.data.on('end', () => {
-        const finalUrl = upstreamResponse.request?.res?.responseUrl || targetUrl;
-        const rewritten = rewriteM3U8(manifestText, finalUrl, '/proxy?url=');
-        res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-        res.status(200).send(rewritten);
-      });
+    stream.on('data', (chunk) => {
+      if (!hasDecided) {
+        // Inspect initial bytes to accurately differentiate text M3U8 from binary media
+        const snippet = chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim();
+        if (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT')) {
+          // Genuine M3U8 manifest
+          isManifest = true;
+          manifestBuffer += chunk.toString('utf-8');
+        } else {
+          // Direct binary media stream (MPEG-TS, MP4, MKV, etc.) -> PIPE IMMEDIATELY!
+          hasDecided = true;
+          isManifest = false;
 
-      upstreamResponse.data.on('error', (err) => {
-        console.warn('[Proxy Manifest Error]', err.message);
-        if (!res.headersSent) res.status(502).send('Error buffering manifest');
-      });
-    } else {
-      // Continuous Live TS broadcast or MP4 video chunk: pipe immediately!
-      res.status(upstreamResponse.status);
+          res.status(upstreamResponse.status || 200);
+          const rawContentType = upstreamResponse.headers['content-type'];
+          res.setHeader('Content-Type', determineMimeType(rawContentType, targetUrl, finalUrl));
 
-      const headersToForward = [
-        'content-type',
-        'content-length',
-        'content-range',
-        'accept-ranges',
-        'content-duration'
-      ];
+          const headersToForward = [
+            'content-length',
+            'content-range',
+            'accept-ranges',
+            'content-duration'
+          ];
+          for (const h of headersToForward) {
+            if (upstreamResponse.headers[h]) {
+              res.setHeader(h, upstreamResponse.headers[h]);
+            }
+          }
+          if (!upstreamResponse.headers['accept-ranges']) {
+            res.setHeader('Accept-Ranges', 'bytes');
+          }
 
-      for (const header of headersToForward) {
-        if (upstreamResponse.headers[header]) {
-          res.setHeader(header, upstreamResponse.headers[header]);
+          res.write(chunk);
+          stream.pipe(res);
+        }
+      } else if (isManifest) {
+        manifestBuffer += chunk.toString('utf-8');
+        // If manifest size unexpectedly exceeds 1MB, treat as raw binary stream
+        if (manifestBuffer.length > 1024 * 1024) {
+          hasDecided = true;
+          isManifest = false;
+          res.status(upstreamResponse.status || 200);
+          res.setHeader('Content-Type', 'video/mp2t');
+          res.write(Buffer.from(manifestBuffer, 'utf-8'));
+          stream.pipe(res);
         }
       }
+    });
 
-      if (!upstreamResponse.headers['accept-ranges']) {
-        res.setHeader('Accept-Ranges', 'bytes');
-      }
-
-      req.on('close', () => {
-        if (upstreamResponse.data && typeof upstreamResponse.data.destroy === 'function') {
-          upstreamResponse.data.destroy();
+    stream.on('end', () => {
+      if (!res.headersSent) {
+        if (isManifest) {
+          const rewritten = rewriteM3U8(manifestBuffer, finalUrl, '/proxy?url=');
+          res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+          res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+          res.status(200).send(rewritten);
+        } else {
+          res.status(upstreamResponse.status || 200).end();
         }
-      });
+      }
+    });
 
-      return upstreamResponse.data.pipe(res);
-    }
+    stream.on('error', (err) => {
+      console.warn('[Proxy Stream Data Error]', err.message);
+      if (!res.headersSent) {
+        res.status(502).send('Error streaming media data');
+      }
+    });
+
+    req.on('close', () => {
+      if (stream && typeof stream.destroy === 'function') {
+        stream.destroy();
+      }
+    });
+
   } catch (error) {
     console.warn(`[Proxy Error] ${targetUrl}:`, error.message);
     if (!res.headersSent) {
