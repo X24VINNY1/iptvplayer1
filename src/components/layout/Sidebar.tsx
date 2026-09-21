@@ -29,62 +29,83 @@ export default function Sidebar({ collapsed, onToggle }: SidebarProps) {
   return (
     <div 
       data-tv-section="sidebar"
-      className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-950 border-r border-gray-800/50 transition-all duration-300 ${collapsed ? 'w-20' : 'w-64'}`}
+      className={`fixed inset-y-0 left-0 z-50 flex flex-col bg-gray-950/95 backdrop-blur-xl border-r border-gray-800/80 transition-all duration-300 ${collapsed ? 'w-20' : 'w-60'}`}
     >
-      <div className="flex items-center h-16 px-4 mb-6">
-        <div className="flex items-center gap-3 text-indigo-500 font-bold text-xl overflow-hidden">
-          <Play className="w-8 h-8 fill-indigo-500 flex-shrink-0" />
-          {!collapsed && <span>OnyxStream</span>}
+      <div className={`flex items-center h-16 mb-2 ${collapsed ? 'justify-center px-2' : 'px-5'}`}>
+        <div className="flex items-center gap-2.5 text-indigo-500 font-bold text-lg overflow-hidden tracking-wide">
+          <div className="w-10 h-10 rounded-xl bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center shrink-0 shadow-lg shadow-indigo-500/10">
+            <Play className="w-5 h-5 fill-indigo-500 text-indigo-500 ml-0.5" />
+          </div>
+          {!collapsed && <span className="truncate bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent font-extrabold text-base">OnyxStream</span>}
         </div>
       </div>
 
-      <nav className="flex-1 space-y-2 overflow-y-auto overflow-x-hidden px-2">
+      <nav className="flex-1 space-y-1.5 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide py-2">
         {navItems.map((item) => (
           <NavLink
             key={item.path}
             to={item.path}
             data-tv-focusable="true"
             className={({ isActive }) =>
-              `flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-600/30 focus:text-white ${
+              `rounded-xl transition-all outline-none focus:ring-4 focus:ring-indigo-400 focus:bg-indigo-600 focus:text-white focus:scale-105 ${
+                collapsed 
+                  ? 'flex flex-col items-center justify-center py-2 px-1 text-center' 
+                  : 'flex items-center gap-3.5 px-3.5 py-2.5'
+              } ${
                 isActive
-                  ? 'bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                  ? 'bg-indigo-600/25 text-indigo-400 font-semibold border border-indigo-500/40 shadow-inner'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-850'
               }`
             }
-            title={collapsed ? item.name : undefined}
+            title={item.name}
           >
-            <item.icon className="w-5 h-5 flex-shrink-0" />
-            {!collapsed && <span>{item.name}</span>}
+            <item.icon className="w-5 h-5 shrink-0" />
+            <span className={collapsed ? 'text-[10px] font-medium tracking-tight mt-1 truncate max-w-full' : 'text-sm font-medium truncate'}>
+              {item.name}
+            </span>
           </NavLink>
         ))}
       </nav>
 
-      <div className="p-2 space-y-2 mb-4 border-t border-gray-800/50 pt-4">
+      <div className="p-2 space-y-1.5 mb-3 border-t border-gray-850 pt-3">
         <NavLink
           to="/settings"
           data-tv-focusable="true"
           className={({ isActive }) =>
-            `flex items-center gap-3 px-4 py-3 rounded-lg transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-indigo-600/30 focus:text-white ${
+            `rounded-xl transition-all outline-none focus:ring-4 focus:ring-indigo-400 focus:bg-indigo-600 focus:text-white focus:scale-105 ${
+              collapsed 
+                ? 'flex flex-col items-center justify-center py-2 px-1 text-center' 
+                : 'flex items-center gap-3.5 px-3.5 py-2.5'
+            } ${
               isActive
-                ? 'bg-indigo-600/20 text-indigo-400 border-l-2 border-indigo-500'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800/50'
+                ? 'bg-indigo-600/25 text-indigo-400 font-semibold border border-indigo-500/40 shadow-inner'
+                : 'text-gray-400 hover:text-white hover:bg-gray-850'
             }`
           }
-          title={collapsed ? 'Settings' : undefined}
+          title="Settings"
         >
-          <Settings className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span>Settings</span>}
+          <Settings className="w-5 h-5 shrink-0" />
+          <span className={collapsed ? 'text-[10px] font-medium tracking-tight mt-1 truncate max-w-full' : 'text-sm font-medium truncate'}>
+            Settings
+          </span>
         </NavLink>
         <button
           onClick={handleLogout}
           data-tv-focusable="true"
-          className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/50 transition-all whitespace-nowrap outline-none focus:ring-2 focus:ring-red-500 focus:bg-red-600/20 focus:text-red-300"
-          title={collapsed ? 'Logout' : undefined}
+          className={`w-full rounded-xl transition-all outline-none focus:ring-4 focus:ring-red-400 focus:bg-red-600 focus:text-white focus:scale-105 text-gray-400 hover:text-red-400 hover:bg-red-500/10 ${
+            collapsed 
+              ? 'flex flex-col items-center justify-center py-2 px-1 text-center' 
+              : 'flex items-center gap-3.5 px-3.5 py-2.5'
+          }`}
+          title="Logout"
         >
-          <LogOut className="w-5 h-5 flex-shrink-0" />
-          {!collapsed && <span>Logout</span>}
+          <LogOut className="w-5 h-5 shrink-0" />
+          <span className={collapsed ? 'text-[10px] font-medium tracking-tight mt-1 truncate max-w-full' : 'text-sm font-medium truncate'}>
+            Logout
+          </span>
         </button>
       </div>
     </div>
+
   );
 }

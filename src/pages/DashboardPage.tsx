@@ -149,11 +149,11 @@ const DashboardPage: React.FC = () => {
   }
 
   return (
-    <div className="p-6 space-y-8 pb-24">
+    <div className="h-full overflow-y-auto px-6 py-6 md:px-8 md:py-8 space-y-10 scrollbar-hide pb-28">
       {continueWatching.length > 0 && (
         <section>
-          <h2 className="text-xl font-semibold mb-4 text-white">Continue Watching</h2>
-          <div className="flex overflow-x-auto scrollbar-hide pb-4">
+          <h2 className="text-xl font-bold mb-4 text-white tracking-tight">Continue Watching</h2>
+          <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-5">
             {continueWatching.map(item => renderHistoryItem(item, true))}
           </div>
         </section>
@@ -161,8 +161,8 @@ const DashboardPage: React.FC = () => {
 
       {recentlyWatched.length > 0 && continueWatching.length === 0 && (
         <section>
-          <h2 className="text-xl font-semibold mb-4 text-white">Recently Watched</h2>
-          <div className="flex overflow-x-auto scrollbar-hide pb-4">
+          <h2 className="text-xl font-bold mb-4 text-white tracking-tight">Recently Watched</h2>
+          <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-5">
             {recentlyWatched.map(item => renderHistoryItem(item, false))}
           </div>
         </section>
@@ -172,14 +172,14 @@ const DashboardPage: React.FC = () => {
         <section>
           <div className="flex justify-between items-end mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">Live TV Channels</h2>
+              <h2 className="text-xl font-bold text-white tracking-tight">Live TV Channels</h2>
               <p className="text-xs text-gray-400">Top channels from your active categories</p>
             </div>
-            <Link to="/live" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
+            <Link to="/live" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold transition-all outline-none focus:ring-4 focus:ring-indigo-400 px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-800">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleLive.map(channel => (
-              <div key={channel.stream_id} className="flex-none w-48">
+              <div key={channel.stream_id} className="flex-none w-56">
                 <ChannelCard channel={channel} onClick={() => handleLiveClick(channel)} />
               </div>
             ))}
@@ -191,14 +191,14 @@ const DashboardPage: React.FC = () => {
         <section>
           <div className="flex justify-between items-end mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">Movies / VOD</h2>
+              <h2 className="text-xl font-bold text-white tracking-tight">Movies / VOD</h2>
               <p className="text-xs text-gray-400">Featured titles from your active categories</p>
             </div>
-            <Link to="/movies" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
+            <Link to="/movies" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold transition-all outline-none focus:ring-4 focus:ring-indigo-400 px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-800">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleMovies.map(movie => (
-              <div key={movie.stream_id} className="flex-none w-40">
+              <div key={movie.stream_id} className="flex-none w-44">
                 <MovieCard movie={movie} onClick={() => handleMovieClick(movie)} />
               </div>
             ))}
@@ -210,14 +210,14 @@ const DashboardPage: React.FC = () => {
         <section>
           <div className="flex justify-between items-end mb-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">TV Series</h2>
+              <h2 className="text-xl font-bold text-white tracking-tight">TV Series</h2>
               <p className="text-xs text-gray-400">Popular series from your active categories</p>
             </div>
-            <Link to="/series" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-all outline-none focus:ring-2 focus:ring-indigo-400 focus:underline px-2 py-1 rounded">See All</Link>
+            <Link to="/series" data-tv-focusable="true" className="text-indigo-400 hover:text-indigo-300 text-sm font-semibold transition-all outline-none focus:ring-4 focus:ring-indigo-400 px-3 py-1.5 rounded-lg bg-gray-900 border border-gray-800">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
             {visibleSeries.map(item => (
-              <div key={item.series_id} className="flex-none w-40">
+              <div key={item.series_id} className="flex-none w-44">
                 <SeriesCard series={item} onClick={() => handleSeriesClick(item)} />
               </div>
             ))}
@@ -229,3 +229,4 @@ const DashboardPage: React.FC = () => {
 };
 
 export default DashboardPage;
+

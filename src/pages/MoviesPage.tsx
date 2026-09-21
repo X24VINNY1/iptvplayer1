@@ -198,7 +198,7 @@ const MoviesPage: React.FC = () => {
 
   if (dataLoading || isSyncing) {
     return (
-      <div className="h-[calc(100vh-64px)] flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <LoadingSpinner size="lg" message="Loading Movies..." />
       </div>
     );
@@ -209,9 +209,10 @@ const MoviesPage: React.FC = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header & Controls */}
-      <div className="flex-none pt-4 px-6 pb-2 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
+      <div className="flex-none pt-3 px-6 pb-2.5 bg-gray-950/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800/80">
+
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -286,7 +287,7 @@ const MoviesPage: React.FC = () => {
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Hero Backdrop Banner */}
           {focusedMovie ? (
-            <div className="relative flex-none h-72 sm:h-80 md:h-96 w-full overflow-hidden border-b border-gray-800/80">
+            <div className="relative flex-none h-[38vh] min-h-[250px] max-h-[380px] w-full overflow-hidden border-b border-gray-800/80">
               {/* High-res backdrop or fallback to stream icon */}
               <div
                 className="absolute inset-0 bg-cover bg-center filter blur-[1px] transform scale-105 transition-all duration-700 opacity-40"
@@ -298,7 +299,8 @@ const MoviesPage: React.FC = () => {
               <div className="absolute inset-0 bg-gradient-to-t from-gray-950 via-transparent to-black/40" />
 
               {/* Foreground Hero Content */}
-              <div className="relative h-full max-w-5xl p-6 sm:p-8 flex flex-col justify-end z-10 space-y-3">
+              <div className="relative h-full max-w-5xl p-6 sm:p-8 flex flex-col justify-end z-10 space-y-2.5">
+
                 <div className="flex items-center gap-2">
                   <span className="px-2.5 py-0.5 bg-indigo-600/90 text-white text-[11px] font-bold rounded-md uppercase tracking-wider">
                     Featured

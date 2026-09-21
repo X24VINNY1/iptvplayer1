@@ -6,7 +6,7 @@ import { useTVRemote } from '@/hooks/useTVRemote';
 
 export default function AppLayout() {
   useTVRemote();
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -26,7 +26,7 @@ export default function AppLayout() {
   };
 
   return (
-    <div className="flex h-screen bg-gray-950 overflow-hidden text-gray-100 font-sans">
+    <div className="flex h-screen bg-gray-950 overflow-hidden text-gray-100 font-sans select-none">
       <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
       
       {isMobile && !sidebarCollapsed && (
@@ -36,14 +36,13 @@ export default function AppLayout() {
         />
       )}
 
-      <div className={`flex-1 flex flex-col transition-all duration-300 ${isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-64'}`}>
+      <div className={`flex-1 flex flex-col min-w-0 h-screen overflow-hidden transition-all duration-300 ${isMobile ? 'ml-0' : sidebarCollapsed ? 'ml-20' : 'ml-60'}`}>
         <Header onToggleSidebar={toggleSidebar} />
-        <main className="flex-1 overflow-y-auto">
-          <div className="p-4 sm:p-6 md:p-8">
-            <Outlet />
-          </div>
+        <main className="flex-1 min-h-0 overflow-hidden flex flex-col relative">
+          <Outlet />
         </main>
       </div>
     </div>
   );
 }
+

@@ -233,7 +233,7 @@ const LiveTVPage: React.FC = () => {
 
   if (dataLoading || isSyncing) {
     return (
-      <div className="h-[calc(100vh-64px)] flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <LoadingSpinner size="lg" message="Loading Live TV..." />
       </div>
     );
@@ -244,9 +244,10 @@ const LiveTVPage: React.FC = () => {
   }
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col overflow-hidden">
+    <div className="h-full flex flex-col overflow-hidden">
       {/* Header & Controls */}
-      <div className="flex-none pt-4 px-6 pb-3 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
+      <div className="flex-none pt-3 px-6 pb-2.5 bg-gray-950/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800/80">
+
         <div className="flex flex-wrap items-center justify-between gap-3 mb-3">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -337,19 +338,20 @@ const LiveTVPage: React.FC = () => {
       {/* Main Content Area */}
       {viewMode === 'preview' ? (
         /* OwnTV Signature Split Preview Mode */
-        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+        <div className="flex-1 flex flex-col lg:flex-row overflow-hidden min-h-0">
           {/* Left Column: Channel List */}
-          <div className="w-full lg:w-[420px] flex-shrink-0 flex flex-col border-r border-gray-800/80 bg-gray-950/40">
+          <div className="w-full lg:w-[380px] xl:w-[420px] flex-shrink-0 flex flex-col border-r border-gray-800/80 bg-gray-950/60 min-h-0">
             {/* Quick Search */}
-            <div className="p-3 border-b border-gray-800/60">
+            <div className="p-3 border-b border-gray-800/80 bg-gray-900/40">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
                 <input
                   type="text"
+                  data-tv-focusable="true"
                   value={channelSearch}
                   onChange={(e) => setChannelSearch(e.target.value)}
                   placeholder="Filter channels..."
-                  className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-3 py-1.5 text-xs text-white placeholder-gray-500 focus:border-indigo-500 outline-none"
+                  className="w-full bg-gray-900 border border-gray-800 rounded-xl pl-9 pr-3 py-2 text-xs text-white placeholder-gray-500 focus:border-indigo-500 outline-none focus:ring-2 focus:ring-indigo-400"
                 />
               </div>
             </div>
@@ -357,7 +359,7 @@ const LiveTVPage: React.FC = () => {
             {/* Channels List */}
             <div 
               onScroll={handleListScroll}
-              className="flex-1 overflow-y-auto divide-y divide-gray-800/40 scrollbar-thin"
+              className="flex-1 overflow-y-auto divide-y divide-gray-850/60 scrollbar-thin p-1"
             >
               {displayedStreams.length === 0 ? (
                 <div className="p-8 text-center text-gray-500 text-xs">No channels in this view.</div>
@@ -381,11 +383,11 @@ const LiveTVPage: React.FC = () => {
                             handleChannelClick(channel);
                           }
                         }}
-                        className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition-all outline-none ${
+                        className={`flex items-center gap-3.5 px-3.5 py-3 rounded-xl cursor-pointer transition-all outline-none my-0.5 ${
                           isSelected
-                            ? 'bg-indigo-600/30 border-l-4 border-indigo-500 text-white shadow-inner ring-2 ring-indigo-500/50'
-                            : 'hover:bg-gray-900/60 text-gray-300'
-                        } focus:ring-4 focus:ring-indigo-500 focus:bg-indigo-600/40 focus:text-white focus:z-10`}
+                            ? 'bg-indigo-600/30 text-white shadow-inner ring-2 ring-indigo-500'
+                            : 'hover:bg-gray-900/70 text-gray-300'
+                        } focus:ring-4 focus:ring-indigo-400 focus:bg-indigo-600/40 focus:text-white focus:z-10 focus:scale-[1.01]`}
                       >
                         {channel.stream_icon ? (
                           <img
@@ -393,22 +395,24 @@ const LiveTVPage: React.FC = () => {
                             alt=""
                             loading="lazy"
                             decoding="async"
-                            className="w-9 h-9 rounded-lg object-contain bg-black/40 flex-shrink-0 p-0.5 border border-gray-800"
+                            className="w-10 h-10 rounded-xl object-contain bg-black/60 shrink-0 p-1 border border-gray-800 shadow"
                             onError={(e) => {
                               (e.target as HTMLElement).style.display = 'none';
                             }}
                           />
                         ) : (
-                          <div className="w-9 h-9 rounded-lg bg-gray-900 border border-gray-800 flex items-center justify-center flex-shrink-0">
-                            <Radio className="w-4 h-4 text-gray-500" />
+                          <div className="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center shrink-0">
+                            <Radio className="w-5 h-5 text-gray-500" />
                           </div>
                         )}
 
                         <div className="flex-1 min-w-0">
                           <p className="text-sm font-semibold truncate leading-snug">{channel.name}</p>
-                          <p className="text-[11px] text-gray-500 truncate mt-0.5">
-                            CH {channel.num || channel.stream_id}
-                          </p>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-gray-850 text-indigo-400 font-mono font-medium">
+                              CH {channel.num || channel.stream_id}
+                            </span>
+                          </div>
                         </div>
 
                         <button
@@ -416,7 +420,7 @@ const LiveTVPage: React.FC = () => {
                             e.stopPropagation();
                             launchFullscreen(channel);
                           }}
-                          className="p-1.5 rounded-lg bg-gray-800/60 hover:bg-indigo-600 hover:text-white text-gray-400 opacity-0 group-hover:opacity-100 transition-all"
+                          className="p-2 rounded-xl bg-gray-800/80 hover:bg-indigo-600 hover:text-white text-gray-400 transition-all opacity-0 group-hover:opacity-100"
                           title="Play Fullscreen"
                         >
                           <Play className="w-3.5 h-3.5 fill-current" />
@@ -432,7 +436,7 @@ const LiveTVPage: React.FC = () => {
                         data-tv-focusable="true"
                         data-tv-section="content"
                         onClick={() => setVisibleCount((prev) => Math.min(prev + 50, filteredStreams.length))}
-                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-2 focus:ring-indigo-500"
+                        className="px-4 py-2 bg-gray-900 hover:bg-gray-800 border border-gray-800 rounded-xl text-xs font-semibold text-indigo-400 focus:ring-4 focus:ring-indigo-400"
                       >
                         Load More Channels ({visibleCount} of {filteredStreams.length})
                       </button>
@@ -443,36 +447,37 @@ const LiveTVPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Right Column: Instant Live Preview Player */}
-          <div className="flex-1 flex flex-col bg-black overflow-hidden relative">
+          {/* Right Column: Instant Live Preview Player Stage */}
+          <div className="flex-1 min-w-0 flex flex-col items-center justify-center p-4 lg:p-6 bg-gradient-to-b from-gray-950 via-gray-900/40 to-gray-950 overflow-y-auto scrollbar-hide">
             {previewChannel ? (
-              <div className="flex-1 flex flex-col h-full">
-                {/* Video Window */}
-                <div className="flex-1 bg-black flex items-center justify-center relative overflow-hidden group">
+              <div className="w-full max-w-4xl flex flex-col my-auto gap-4">
+                {/* 16:9 Aspect Video Stage - Strictly Proportioned, No Squishing */}
+                <div className="w-full aspect-video rounded-2xl overflow-hidden bg-black shadow-2xl border border-gray-800/80 relative flex items-center justify-center group ring-1 ring-white/10">
                   <video
                     ref={previewVideoRef}
-                    className="w-full h-full object-contain"
+                    className="w-full h-full object-contain bg-black"
                     autoPlay
                     playsInline
                     muted={isMuted}
                   />
 
                   {/* Top Bar on Hover */}
-                  <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/80 via-black/30 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                  <div className="absolute top-0 inset-x-0 p-4 bg-gradient-to-b from-black/90 via-black/40 to-transparent flex items-center justify-between opacity-0 group-hover:opacity-100 transition-opacity z-10">
                     <div className="flex items-center gap-3">
                       {previewChannel.stream_icon && (
                         <img
                           src={previewChannel.stream_icon}
                           alt=""
-                          className="w-7 h-7 rounded object-contain bg-black/50"
+                          className="w-8 h-8 rounded-lg object-contain bg-black/60 p-0.5 border border-white/10"
                         />
                       )}
                       <div>
                         <h3 className="text-sm font-bold text-white truncate max-w-sm">
                           {previewChannel.name}
                         </h3>
-                        <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase">
-                          ● Streaming Live
+                        <span className="text-[10px] text-emerald-400 font-semibold tracking-wider uppercase flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-ping" />
+                          Live Stream
                         </span>
                       </div>
                     </div>
@@ -491,7 +496,7 @@ const LiveTVPage: React.FC = () => {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setIsMuted(!isMuted)}
-                        className="p-2 rounded-lg bg-gray-900/80 text-white hover:bg-indigo-600 transition-colors"
+                        className="p-2 rounded-lg bg-gray-900/90 text-white hover:bg-indigo-600 transition-colors border border-white/10"
                       >
                         {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                       </button>
@@ -508,62 +513,77 @@ const LiveTVPage: React.FC = () => {
                           setIsMuted(val === 0);
                           if (previewVideoRef.current) previewVideoRef.current.volume = val;
                         }}
-                        className="w-20 accent-indigo-500 h-1"
+                        className="w-24 accent-indigo-500 h-1.5 cursor-pointer"
                       />
                     </div>
 
-                    <div className="flex items-center gap-2 text-xs text-gray-400 font-mono">
-                      <span className="px-2 py-0.5 bg-gray-900/80 rounded border border-gray-800">
+                    <div className="flex items-center gap-2 text-xs text-gray-300 font-mono">
+                      <span className="px-2.5 py-1 bg-gray-900/90 rounded-lg border border-gray-700/80 font-semibold">
                         1080p
                       </span>
-                      <span className="px-2 py-0.5 bg-gray-900/80 rounded border border-gray-800">
-                        AAC / H.264
+                      <span className="px-2.5 py-1 bg-gray-900/90 rounded-lg border border-gray-700/80 font-semibold">
+                        H.264 / AAC
                       </span>
                     </div>
                   </div>
                 </div>
 
-                {/* Bottom Channel Info Panel */}
-                <div className="p-4 bg-gray-950 border-t border-gray-800/80 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
+                {/* Channel Info & Action Hub - 10-foot UI ergonomics */}
+                <div className="p-4 sm:p-5 bg-gray-900/90 rounded-2xl border border-gray-800/90 backdrop-blur-md flex flex-wrap items-center justify-between gap-4 shadow-xl">
+                  <div className="flex items-center gap-4 min-w-0">
                     {previewChannel.stream_icon ? (
                       <img
                         src={previewChannel.stream_icon}
                         alt=""
-                        className="w-12 h-12 rounded-xl object-contain bg-black/60 p-1 border border-gray-800"
+                        className="w-14 h-14 rounded-xl object-contain bg-black/70 p-1.5 border border-gray-700/80 shrink-0"
                       />
                     ) : (
-                      <div className="w-12 h-12 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center">
-                        <Radio className="w-6 h-6 text-indigo-400" />
+                      <div className="w-14 h-14 rounded-xl bg-gray-800 border border-gray-700 flex items-center justify-center shrink-0">
+                        <Radio className="w-7 h-7 text-indigo-400" />
                       </div>
                     )}
-                    <div>
-                      <h2 className="text-base font-bold text-white">{previewChannel.name}</h2>
-                      <p className="text-xs text-gray-400">
-                        Click Fullscreen or press Enter to watch full screen
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="px-2 py-0.5 rounded-md bg-indigo-600/30 text-indigo-300 font-mono text-xs font-bold border border-indigo-500/30">
+                          CH {previewChannel.num || previewChannel.stream_id}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-md bg-red-500/20 text-red-400 text-xs font-semibold flex items-center gap-1">
+                          <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                          BROADCAST
+                        </span>
+                      </div>
+                      <h2 className="text-lg sm:text-xl font-extrabold text-white truncate leading-snug">
+                        {previewChannel.name}
+                      </h2>
+                      <p className="text-xs text-gray-400 truncate mt-0.5">
+                        Press Enter or OK to watch in fullscreen
                       </p>
                     </div>
                   </div>
 
-                  <button
-                    data-tv-focusable="true"
-                    data-tv-section="preview"
-                    onClick={() => launchFullscreen(previewChannel)}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold shadow-lg shadow-indigo-600/25 transition-all outline-none focus:ring-4 focus:ring-indigo-400 focus:scale-105"
-                  >
-                    <Play className="w-4 h-4 fill-current" />
-                    Watch Fullscreen
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <button
+                      data-tv-focusable="true"
+                      data-tv-section="preview"
+                      onClick={() => launchFullscreen(previewChannel)}
+                      className="flex items-center gap-2 px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-bold shadow-lg shadow-indigo-600/30 transition-all outline-none focus:ring-4 focus:ring-indigo-400 focus:scale-105"
+                    >
+                      <Play className="w-4 h-4 fill-current" />
+                      Watch Fullscreen
+                    </button>
+                  </div>
                 </div>
               </div>
             ) : (
-              <div className="flex-1 flex flex-col items-center justify-center text-gray-500">
-                <Radio className="w-12 h-12 mb-3 text-gray-600" />
-                <p className="text-sm">Select a channel to begin preview</p>
+              <div className="w-full max-w-4xl aspect-video rounded-2xl border border-dashed border-gray-800 flex flex-col items-center justify-center text-gray-500 bg-gray-900/20 my-auto">
+                <Radio className="w-14 h-14 mb-3 text-gray-600" />
+                <p className="text-base font-medium text-gray-400">Select a channel from the list to preview</p>
+                <p className="text-xs text-gray-600 mt-1">Instant zero-lag hardware playback</p>
               </div>
             )}
           </div>
         </div>
+
       ) : (
         /* Classic Grid Mode */
         <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">

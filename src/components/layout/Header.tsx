@@ -36,35 +36,44 @@ export default function Header({ onToggleSidebar }: HeaderProps) {
   const initial = username.charAt(0).toUpperCase();
 
   return (
-    <header className="h-16 bg-gray-950/80 backdrop-blur-xl border-b border-gray-800/50 sticky top-0 z-40 px-6 flex items-center justify-between">
+    <header data-tv-section="header" className="h-16 flex-none bg-gray-950/90 backdrop-blur-xl border-b border-gray-800/80 px-6 flex items-center justify-between z-30">
       <div className="flex items-center gap-4">
         <button
+          data-tv-focusable="true"
           onClick={onToggleSidebar}
-          className="p-2 -ml-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-800/50 transition-colors"
+          className="p-2 -ml-2 text-gray-400 hover:text-white rounded-xl hover:bg-gray-800/60 transition-colors outline-none focus:ring-4 focus:ring-indigo-400 focus:text-white"
+          title="Toggle Navigation Menu"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="w-5 h-5" />
         </button>
-        <h1 className="text-xl font-semibold text-white hidden sm:block">{getPageTitle()}</h1>
+        <h1 className="text-xl font-bold text-white tracking-tight hidden sm:block">{getPageTitle()}</h1>
       </div>
 
       <div className="flex-1 max-w-xl mx-4 flex justify-center">
         <form onSubmit={handleSearch} className="relative w-full max-w-sm lg:max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
           <input
             type="text"
+            data-tv-focusable="true"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search..."
-            className="w-full bg-gray-800/50 border border-gray-700/50 text-white rounded-full pl-10 pr-4 py-2 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-gray-800 transition-all"
+            placeholder="Search channels, movies, shows..."
+            className="w-full bg-gray-900/80 border border-gray-800 text-white rounded-full pl-10 pr-4 py-2 text-xs focus:outline-none focus:ring-4 focus:ring-indigo-400 focus:border-indigo-500 transition-all placeholder-gray-500"
           />
         </form>
       </div>
 
       <div className="flex items-center">
-        <div className="w-10 h-10 rounded-full bg-indigo-600 flex items-center justify-center text-white font-medium shadow-lg shadow-indigo-500/20 cursor-pointer">
+        <div 
+          data-tv-focusable="true"
+          onClick={() => navigate('/settings')}
+          className="w-9 h-9 rounded-full bg-indigo-600 border border-indigo-400/40 flex items-center justify-center text-white font-bold text-sm shadow-lg shadow-indigo-500/20 cursor-pointer outline-none focus:ring-4 focus:ring-indigo-400"
+          title={`User: ${username}`}
+        >
           {initial}
         </div>
       </div>
     </header>
   );
+
 }

@@ -60,7 +60,7 @@ const SeriesDetailPage: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="h-[calc(100vh-64px)] flex items-center justify-center">
+      <div className="h-full flex items-center justify-center">
         <LoadingSpinner size="lg" message="Loading Series Details..." />
       </div>
     );
@@ -81,7 +81,8 @@ const SeriesDetailPage: React.FC = () => {
   const backdropImage = info?.backdrop_path?.[0] || info?.cover;
 
   return (
-    <div className="flex flex-col min-h-[calc(100vh-64px)] pb-20">
+    <div className="h-full overflow-y-auto flex flex-col pb-24 scrollbar-hide">
+
       {/* Hero Section */}
       <div className="relative w-full h-[50vh] min-h-[400px] flex-shrink-0">
         <div className="absolute inset-0">

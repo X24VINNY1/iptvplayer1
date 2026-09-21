@@ -69,45 +69,52 @@ export default function MultiViewPage() {
   const activeSlotCount = layout === '1' ? 1 : layout === '2' ? 2 : 4;
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col bg-gray-950 text-white overflow-hidden">
+    <div className="h-full flex flex-col bg-gray-950 text-white overflow-hidden">
       {/* Top Controls Bar */}
-      <div className="flex-none px-6 py-3 bg-gray-900/80 backdrop-blur-md border-b border-gray-800 flex items-center justify-between z-10">
+      <div className="flex-none px-6 py-3 bg-gray-900/90 backdrop-blur-md border-b border-gray-800/80 flex items-center justify-between z-10">
         <div className="flex items-center gap-3">
           <button
+            data-tv-focusable="true"
             onClick={() => navigate(-1)}
-            className="p-1.5 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-300"
+            className="p-2 rounded-xl bg-gray-800 hover:bg-gray-700 text-gray-300 outline-none focus:ring-4 focus:ring-indigo-400"
+            title="Go Back"
           >
             <ArrowLeft className="w-4 h-4" />
           </button>
-          <div className="flex items-center gap-2">
-            <Grid className="w-5 h-5 text-indigo-400" />
-            <h1 className="text-lg font-bold">Multi-View 4-Screen Matrix</h1>
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-indigo-600/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+              <Grid className="w-4 h-4" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight">Multi-View 4-Screen Matrix</h1>
           </div>
         </div>
 
         {/* Layout Selector */}
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400 font-medium mr-2">Layout:</span>
+          <span className="text-xs text-gray-400 font-medium mr-2 hidden sm:inline">Layout:</span>
           <button
+            data-tv-focusable="true"
             onClick={() => setLayout('1')}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-              layout === '1' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all outline-none focus:ring-4 focus:ring-indigo-400 ${
+              layout === '1' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-800 text-gray-400 hover:text-white'
             }`}
           >
             Single
           </button>
           <button
+            data-tv-focusable="true"
             onClick={() => setLayout('2')}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-              layout === '2' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all outline-none focus:ring-4 focus:ring-indigo-400 ${
+              layout === '2' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-800 text-gray-400 hover:text-white'
             }`}
           >
             Dual (1x2)
           </button>
           <button
+            data-tv-focusable="true"
             onClick={() => setLayout('4')}
-            className={`px-3 py-1 text-xs font-semibold rounded-lg transition-all ${
-              layout === '4' ? 'bg-indigo-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-white'
+            className={`px-3.5 py-1.5 text-xs font-semibold rounded-xl transition-all outline-none focus:ring-4 focus:ring-indigo-400 ${
+              layout === '4' ? 'bg-indigo-600 text-white shadow-md' : 'bg-gray-800 text-gray-400 hover:text-white'
             }`}
           >
             Quad (2x2)
@@ -117,14 +124,15 @@ export default function MultiViewPage() {
 
       {/* Grid Display */}
       <div
-        className={`flex-1 p-3 gap-3 grid ${
+        className={`flex-1 min-h-0 p-3 sm:p-4 gap-3 sm:gap-4 grid ${
           layout === '1'
-            ? 'grid-cols-1'
+            ? 'grid-cols-1 max-w-5xl mx-auto w-full my-auto'
             : layout === '2'
             ? 'grid-cols-1 md:grid-cols-2'
-            : 'grid-cols-1 md:grid-cols-2 grid-rows-2'
+            : 'grid-cols-2 grid-rows-2'
         }`}
       >
+
         {slots.slice(0, activeSlotCount).map((slot) => (
           <MultiViewSlot
             key={slot.id}

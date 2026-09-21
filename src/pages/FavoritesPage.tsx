@@ -55,9 +55,10 @@ const FavoritesPage: React.FC = () => {
   });
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col">
-      <div className="flex-none pt-4 px-6 pb-2 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
-        <h1 className="text-2xl font-bold text-white mb-4">My Favorites</h1>
+    <div className="h-full flex flex-col overflow-hidden">
+      <div className="flex-none pt-3 px-6 pb-2.5 bg-gray-950/90 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800/80">
+        <h1 className="text-2xl font-bold text-white mb-3 tracking-tight">My Favorites</h1>
+
         
         <div data-tv-section="categories" className="flex space-x-2 overflow-x-auto scrollbar-hide pb-2">
           {(['all', 'live', 'vod', 'series'] as FilterType[]).map(t => {

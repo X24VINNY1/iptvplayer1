@@ -99,7 +99,8 @@ const SearchPage: React.FC = () => {
   };
 
   return (
-    <div className="h-[calc(100vh-64px)] flex flex-col p-6">
+    <div className="h-full flex flex-col p-6 overflow-hidden">
+
       <div className="max-w-2xl mx-auto w-full mb-8">
         <SearchBar 
           value={query} 
