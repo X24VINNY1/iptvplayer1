@@ -1,21 +1,47 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useContentStore } from '@/store/useContentStore';
+import { XtreamAPI } from '@/api/xtream';
 import LoginForm from '@/components/accounts/LoginForm';
 import M3UImport from '@/components/accounts/M3UImport';
 import AccountManager from '@/components/accounts/AccountManager';
+import SyncLoadingScreen from '@/components/ui/SyncLoadingScreen';
 import { MonitorPlay } from 'lucide-react';
 
 const LoginPage: React.FC = () => {
   const navigate = useNavigate();
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, serverUrl, username, password, connectionType, m3uChannels } = useAuthStore();
+  const { isLoaded, isSyncing, syncAll } = useContentStore();
   const [activeTab, setActiveTab] = useState<'xtream' | 'm3u'>('xtream');
 
+  // Trigger library sync when authenticated
   useEffect(() => {
-    if (isAuthenticated) {
-      navigate('/');
+    if (isAuthenticated && !isLoaded && !isSyncing) {
+      let api: XtreamAPI | null = null;
+      if (connectionType === 'xtream' && serverUrl && username && password) {
+        api = new XtreamAPI(serverUrl, username, password);
+      }
+      syncAll(api, connectionType, m3uChannels).catch((err) => {
+        console.error('Auto sync error:', err);
+      });
     }
-  }, [isAuthenticated, navigate]);
+  }, [isAuthenticated, isLoaded, isSyncing, connectionType, serverUrl, username, password, m3uChannels, syncAll]);
+
+  // Once fully loaded, transition to dashboard
+  useEffect(() => {
+    if (isAuthenticated && isLoaded) {
+      const timer = setTimeout(() => {
+        navigate('/');
+      }, 700);
+      return () => clearTimeout(timer);
+    }
+  }, [isAuthenticated, isLoaded, navigate]);
+
+  // Show full loading sync screen while fetching all movies, shows, and channels
+  if (isAuthenticated && (isSyncing || !isLoaded)) {
+    return <SyncLoadingScreen onComplete={() => navigate('/')} />;
+  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-br from-gray-950 via-gray-900 to-indigo-950/30 p-4">

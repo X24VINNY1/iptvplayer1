@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useContentStore } from '@/store/useContentStore';
+import { useCategoryStore } from '@/store/useCategoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
 import CategoryFilter from '@/components/ui/CategoryFilter';
 import MovieCard from '@/components/cards/MovieCard';
@@ -8,18 +10,20 @@ import LoadingSpinner from '@/components/ui/LoadingSpinner';
 import ErrorMessage from '@/components/ui/ErrorMessage';
 import Modal from '@/components/ui/Modal';
 import FavoriteButton from '@/components/ui/FavoriteButton';
-import { Play, Star, Clock, Calendar, Info } from 'lucide-react';
-import { VodStream, Category, VodInfo } from '@/types';
+import CategoryManagerModal from '@/components/ui/CategoryManagerModal';
+import { Play, Star, Clock, Calendar, Info, SlidersHorizontal, Sparkles } from 'lucide-react';
+import { VodStream, VodInfo } from '@/types';
 
 const MoviesPage: React.FC = () => {
   const navigate = useNavigate();
-  const { connectionType } = useAuthStore();
+  const { connectionType, m3uChannels } = useAuthStore();
   const api = useXtreamAPI();
+  const { vodCategories, vodStreams, isLoaded, syncAll, isSyncing } = useContentStore();
+  const { getVisibleCategories, isCategoryHidden, filterUsOnly } = useCategoryStore();
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [movies, setMovies] = useState<VodStream[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
+  const [dataLoading, setDataLoading] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   
   const [selectedMovie, setSelectedMovie] = useState<VodStream | null>(null);
@@ -29,33 +33,38 @@ const MoviesPage: React.FC = () => {
   useEffect(() => {
     if (connectionType === 'm3u') return;
 
-    const fetchData = async () => {
+    if (!isLoaded && !isSyncing) {
       setDataLoading(true);
-      setFetchError(null);
-      try {
-        if (api) {
-          const [cats, allMovies] = await Promise.all([
-            api.getVodCategories(),
-            api.getVodStreams()
-          ]);
-          setCategories(cats);
-          setMovies(allMovies);
-        }
-      } catch (err: any) {
-        console.error('Failed to load Movies:', err);
-        setFetchError(err?.message || 'Failed to load movies');
-      } finally {
-        setDataLoading(false);
-      }
-    };
+      syncAll(api, connectionType, m3uChannels)
+        .catch((err) => {
+          console.error('Failed to load Movies:', err);
+          setFetchError(err?.message || 'Failed to load movies');
+        })
+        .finally(() => {
+          setDataLoading(false);
+        });
+    }
+  }, [isLoaded, isSyncing, api, connectionType, m3uChannels, syncAll]);
 
-    fetchData();
-  }, [api, connectionType]);
+  // Visible categories
+  const visibleCategories = useMemo(() => {
+    return getVisibleCategories('vod', vodCategories);
+  }, [vodCategories, getVisibleCategories]);
 
+  // Filter movies: only show movies from visible categories
   const filteredMovies = useMemo(() => {
-    if (selectedCategory === null) return movies;
-    return movies.filter(m => m.category_id === selectedCategory);
-  }, [movies, selectedCategory]);
+    const hiddenSet = new Set(
+      vodCategories.filter((c) => isCategoryHidden('vod', c.category_id)).map((c) => c.category_id)
+    );
+
+    let movies = vodStreams.filter((m) => !hiddenSet.has(m.category_id));
+
+    if (selectedCategory !== null) {
+      movies = movies.filter((m) => m.category_id === selectedCategory);
+    }
+
+    return movies;
+  }, [vodStreams, vodCategories, selectedCategory, isCategoryHidden]);
 
   const handleMovieClick = async (movie: VodStream) => {
     setSelectedMovie(movie);
@@ -84,6 +93,10 @@ const MoviesPage: React.FC = () => {
     }
   };
 
+  const handleQuickUsFilter = () => {
+    filterUsOnly('vod', vodCategories);
+  };
+
   if (connectionType === 'm3u') {
     return (
       <div className="h-[calc(100vh-64px)] flex flex-col items-center justify-center p-6 text-center">
@@ -94,7 +107,7 @@ const MoviesPage: React.FC = () => {
     );
   }
 
-  if (dataLoading) {
+  if (dataLoading || isSyncing) {
     return (
       <div className="h-[calc(100vh-64px)] flex items-center justify-center">
         <LoadingSpinner size="lg" message="Loading Movies..." />
@@ -108,23 +121,62 @@ const MoviesPage: React.FC = () => {
 
   return (
     <div className="h-[calc(100vh-64px)] flex flex-col">
+      {/* Header & Filter Controls */}
       <div className="flex-none pt-4 px-6 pb-2 bg-gray-950/80 backdrop-blur-md sticky top-0 z-10 border-b border-gray-800">
-        <h1 className="text-2xl font-bold text-white mb-4">Movies</h1>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-white">Movies / VOD</h1>
+            <p className="text-xs text-gray-400 mt-0.5">
+              Showing {filteredMovies.length} movies across {visibleCategories.length} categories
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleQuickUsFilter}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600/90 hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold shadow-md shadow-indigo-600/20 transition-colors"
+              title="Automatically hide foreign categories and keep only US / USA / EN"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              US / EN Only
+            </button>
+
+            <button
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-800 hover:bg-gray-700 text-gray-200 rounded-lg text-xs font-medium border border-gray-700 transition-colors"
+              title="Organize and hide unwanted movie categories"
+            >
+              <SlidersHorizontal className="w-3.5 h-3.5 text-indigo-400" />
+              Organize
+            </button>
+          </div>
+        </div>
+
         <CategoryFilter
-          categories={categories}
+          categories={visibleCategories}
           selectedId={selectedCategory}
           onSelect={setSelectedCategory}
         />
       </div>
 
+      {/* Movies Grid */}
       <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
         {filteredMovies.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-gray-400">
-            No movies found in this category.
+          <div className="flex flex-col items-center justify-center h-64 text-gray-400 text-center">
+            <p className="text-base font-medium mb-2">No movies found in this view.</p>
+            <p className="text-xs text-gray-500 max-w-sm mb-4">
+              Categories may be hidden by your filter settings.
+            </p>
+            <button
+              onClick={() => setIsCategoryModalOpen(true)}
+              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-indigo-400 rounded-lg text-xs font-semibold"
+            >
+              Open Category Manager
+            </button>
           </div>
         ) : (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-4 pb-20">
-            {filteredMovies.map(movie => (
+            {filteredMovies.map((movie) => (
               <MovieCard
                 key={movie.stream_id}
                 movie={movie}
@@ -135,6 +187,7 @@ const MoviesPage: React.FC = () => {
         )}
       </div>
 
+      {/* Movie Details Modal */}
       <Modal isOpen={!!selectedMovie} onClose={closeModal} size="xl">
         {selectedMovie && (
           <div className="flex flex-col md:flex-row gap-6 max-w-4xl mx-auto p-2">
@@ -227,6 +280,14 @@ const MoviesPage: React.FC = () => {
           </div>
         )}
       </Modal>
+
+      {/* Category Manager Modal */}
+      <CategoryManagerModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        type="vod"
+        categories={vodCategories}
+      />
     </div>
   );
 };

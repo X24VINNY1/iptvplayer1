@@ -1,14 +1,14 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useContentStore } from '@/store/useContentStore';
+import { useCategoryStore } from '@/store/useCategoryStore';
 import { useHistoryStore } from '@/store/useHistoryStore';
 import { useXtreamAPI } from '@/hooks/useXtreamAPI';
-import { m3uChannelsToLiveStreams } from '@/api/m3u-parser';
 import ChannelCard from '@/components/cards/ChannelCard';
 import MovieCard from '@/components/cards/MovieCard';
 import SeriesCard from '@/components/cards/SeriesCard';
-import LoadingSpinner from '@/components/ui/LoadingSpinner';
-import ErrorMessage from '@/components/ui/ErrorMessage';
+import SyncLoadingScreen from '@/components/ui/SyncLoadingScreen';
 import { Play } from 'lucide-react';
 import { LiveStream, VodStream, Series } from '@/types';
 
@@ -18,43 +18,53 @@ const DashboardPage: React.FC = () => {
   const { getContinueWatching, getHistory } = useHistoryStore();
   const api = useXtreamAPI();
 
-  const [liveStreams, setLiveStreams] = useState<LiveStream[]>([]);
-  const [movies, setMovies] = useState<VodStream[]>([]);
-  const [series, setSeries] = useState<Series[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
-  const [fetchError, setFetchError] = useState<string | null>(null);
+  const {
+    liveStreams,
+    vodStreams,
+    seriesList,
+    liveCategories,
+    vodCategories,
+    seriesCategories,
+    isLoaded,
+    isSyncing,
+    syncAll
+  } = useContentStore();
+
+  const { isCategoryHidden } = useCategoryStore();
 
   const continueWatching = getContinueWatching();
   const recentlyWatched = getHistory(20);
 
+  // If user navigated or refreshed directly, ensure sync runs
   useEffect(() => {
-    const fetchData = async () => {
-      setDataLoading(true);
-      setFetchError(null);
-      try {
-        if (connectionType === 'm3u') {
-          const streams = m3uChannelsToLiveStreams(m3uChannels);
-          setLiveStreams(streams.slice(0, 12));
-        } else if (api) {
-          const [live, vod, tvSeries] = await Promise.all([
-            api.getLiveStreams(),
-            api.getVodStreams(),
-            api.getSeries()
-          ]);
-          setLiveStreams(live.slice(0, 12));
-          setMovies(vod.slice(0, 12));
-          setSeries(tvSeries.slice(0, 12));
-        }
-      } catch (err: any) {
-        console.error('Error fetching dashboard data:', err);
-        setFetchError(err?.message || 'Failed to load dashboard data');
-      } finally {
-        setDataLoading(false);
-      }
-    };
+    if (!isLoaded && !isSyncing) {
+      syncAll(api, connectionType, m3uChannels).catch((err) => {
+        console.error('Error auto-syncing dashboard:', err);
+      });
+    }
+  }, [isLoaded, isSyncing, api, connectionType, m3uChannels, syncAll]);
 
-    fetchData();
-  }, [api, connectionType, m3uChannels]);
+  // Filter items from hidden categories
+  const visibleLive = useMemo(() => {
+    const hiddenSet = new Set(
+      liveCategories.filter((c) => isCategoryHidden('live', c.category_id)).map((c) => c.category_id)
+    );
+    return liveStreams.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 14);
+  }, [liveStreams, liveCategories, isCategoryHidden]);
+
+  const visibleMovies = useMemo(() => {
+    const hiddenSet = new Set(
+      vodCategories.filter((c) => isCategoryHidden('vod', c.category_id)).map((c) => c.category_id)
+    );
+    return vodStreams.filter((m) => !hiddenSet.has(m.category_id)).slice(0, 14);
+  }, [vodStreams, vodCategories, isCategoryHidden]);
+
+  const visibleSeries = useMemo(() => {
+    const hiddenSet = new Set(
+      seriesCategories.filter((c) => isCategoryHidden('series', c.category_id)).map((c) => c.category_id)
+    );
+    return seriesList.filter((s) => !hiddenSet.has(s.category_id)).slice(0, 14);
+  }, [seriesList, seriesCategories, isCategoryHidden]);
 
   const handleLiveClick = (channel: LiveStream) => {
     if (connectionType === 'm3u' && channel.direct_source) {
@@ -91,7 +101,12 @@ const DashboardPage: React.FC = () => {
       >
         <div className="aspect-video relative overflow-hidden bg-gray-800">
           {item.icon ? (
-            <img src={item.icon} alt={item.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+            <img 
+              src={item.icon} 
+              alt={item.name} 
+              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" 
+              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} 
+            />
           ) : (
             <div className="w-full h-full flex items-center justify-center text-gray-500">No Image</div>
           )}
@@ -116,16 +131,8 @@ const DashboardPage: React.FC = () => {
     );
   };
 
-  if (dataLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <LoadingSpinner size="lg" message="Loading Dashboard..." />
-      </div>
-    );
-  }
-
-  if (fetchError && connectionType !== 'm3u') {
-    return <ErrorMessage message={fetchError} className="m-6" />;
+  if (!isLoaded && isSyncing) {
+    return <SyncLoadingScreen onComplete={() => {}} />;
   }
 
   return (
@@ -148,14 +155,17 @@ const DashboardPage: React.FC = () => {
         </section>
       )}
 
-      {liveStreams.length > 0 && (
+      {visibleLive.length > 0 && (
         <section>
           <div className="flex justify-between items-end mb-4">
-            <h2 className="text-xl font-semibold text-white">Live TV</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-white">Live TV Channels</h2>
+              <p className="text-xs text-gray-400">Top channels from your active categories</p>
+            </div>
             <Link to="/live" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
-            {liveStreams.map(channel => (
+            {visibleLive.map(channel => (
               <div key={channel.stream_id} className="flex-none w-48">
                 <ChannelCard channel={channel} onClick={() => handleLiveClick(channel)} />
               </div>
@@ -164,14 +174,17 @@ const DashboardPage: React.FC = () => {
         </section>
       )}
 
-      {movies.length > 0 && (
+      {visibleMovies.length > 0 && (
         <section>
           <div className="flex justify-between items-end mb-4">
-            <h2 className="text-xl font-semibold text-white">Movies</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-white">Movies / VOD</h2>
+              <p className="text-xs text-gray-400">Featured titles from your active categories</p>
+            </div>
             <Link to="/movies" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
-            {movies.map(movie => (
+            {visibleMovies.map(movie => (
               <div key={movie.stream_id} className="flex-none w-40">
                 <MovieCard movie={movie} onClick={() => handleMovieClick(movie)} />
               </div>
@@ -180,14 +193,17 @@ const DashboardPage: React.FC = () => {
         </section>
       )}
 
-      {series.length > 0 && (
+      {visibleSeries.length > 0 && (
         <section>
           <div className="flex justify-between items-end mb-4">
-            <h2 className="text-xl font-semibold text-white">TV Series</h2>
+            <div>
+              <h2 className="text-xl font-semibold text-white">TV Series</h2>
+              <p className="text-xs text-gray-400">Popular series from your active categories</p>
+            </div>
             <Link to="/series" className="text-indigo-400 hover:text-indigo-300 text-sm font-medium transition-colors">See All</Link>
           </div>
           <div className="flex overflow-x-auto scrollbar-hide pb-4 space-x-4">
-            {series.map(item => (
+            {visibleSeries.map(item => (
               <div key={item.series_id} className="flex-none w-40">
                 <SeriesCard series={item} onClick={() => handleSeriesClick(item)} />
               </div>

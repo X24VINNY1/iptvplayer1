@@ -1,15 +1,22 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useAuthStore } from '@/store/useAuthStore';
+import { useContentStore } from '@/store/useContentStore';
+import { useCategoryStore } from '@/store/useCategoryStore';
 import AccountManager from '@/components/accounts/AccountManager';
+import CategoryManagerModal from '@/components/ui/CategoryManagerModal';
 import { formatDate } from '@/utils/format';
-import { Server, User, Clock, Activity, Shield, Tv, Info, Globe } from 'lucide-react';
+import { Server, User, Clock, Activity, Shield, Tv, Info, Globe, SlidersHorizontal, Sparkles, Film, Radio } from 'lucide-react';
 
 const SettingsPage: React.FC = () => {
   const { userInfo, serverInfo, connectionType, serverUrl, username } = useAuthStore();
+  const { liveCategories, vodCategories, seriesCategories } = useContentStore();
+  const { filterUsOnly, showAll } = useCategoryStore();
+
+  const [activeModalType, setActiveModalType] = useState<'live' | 'vod' | 'series' | null>(null);
 
   const isXtream = connectionType === 'xtream';
 
-  const InfoRow = ({ label, value, icon: Icon }: { label: string, value: string | number | undefined, icon: any }) => (
+  const InfoRow = ({ label, value, icon: Icon }: { label: string; value: string | number | undefined; icon: any }) => (
     <div className="flex items-center justify-between p-4 bg-gray-800/30 rounded-xl border border-gray-800/50">
       <div className="flex items-center text-gray-400">
         <Icon className="w-5 h-5 mr-3 text-indigo-400" />
@@ -21,9 +28,118 @@ const SettingsPage: React.FC = () => {
     </div>
   );
 
+  const handleQuickFilterAll = () => {
+    filterUsOnly('live', liveCategories);
+    if (isXtream) {
+      filterUsOnly('vod', vodCategories);
+      filterUsOnly('series', seriesCategories);
+    }
+  };
+
+  const handleResetAll = () => {
+    showAll('live');
+    showAll('vod');
+    showAll('series');
+  };
+
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-12 pb-24 h-[calc(100vh-64px)] overflow-y-auto scrollbar-hide">
       
+      {/* Category Management Section */}
+      <section>
+        <div className="mb-6 border-b border-gray-800 pb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h2 className="text-2xl font-bold text-white flex items-center">
+              <SlidersHorizontal className="w-6 h-6 mr-2 text-indigo-500" />
+              Category & Language Filters
+            </h2>
+            <p className="text-gray-400 mt-1 text-sm">
+              Hide unwanted international categories or keep only US, USA, and English content.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={handleQuickFilterAll}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow-md shadow-indigo-600/30 transition-all active:scale-95"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              Set All to US / EN Only
+            </button>
+            <button
+              onClick={handleResetAll}
+              className="px-3.5 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded-xl text-xs font-medium border border-gray-700 transition-colors"
+            >
+              Show All Categories
+            </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {/* Live TV Categories */}
+          <div className="p-5 bg-gray-900/60 rounded-2xl border border-gray-800 flex flex-col justify-between">
+            <div>
+              <div className="flex items-center gap-3 mb-2">
+                <Radio className="w-5 h-5 text-indigo-400" />
+                <h3 className="text-white font-semibold text-base">Live TV</h3>
+              </div>
+              <p className="text-xs text-gray-400 mb-4">
+                {liveCategories.length} categories available
+              </p>
+            </div>
+            <button
+              onClick={() => setActiveModalType('live')}
+              className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-indigo-300 text-xs font-semibold rounded-lg transition-colors"
+            >
+              Organize Channels ({liveCategories.length})
+            </button>
+          </div>
+
+          {/* VOD Movies Categories */}
+          {isXtream && (
+            <div className="p-5 bg-gray-900/60 rounded-2xl border border-gray-800 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Film className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-white font-semibold text-base">Movies (VOD)</h3>
+                </div>
+                <p className="text-xs text-gray-400 mb-4">
+                  {vodCategories.length} categories available
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveModalType('vod')}
+                className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-indigo-300 text-xs font-semibold rounded-lg transition-colors"
+              >
+                Organize Movies ({vodCategories.length})
+              </button>
+            </div>
+          )}
+
+          {/* TV Series Categories */}
+          {isXtream && (
+            <div className="p-5 bg-gray-900/60 rounded-2xl border border-gray-800 flex flex-col justify-between">
+              <div>
+                <div className="flex items-center gap-3 mb-2">
+                  <Tv className="w-5 h-5 text-indigo-400" />
+                  <h3 className="text-white font-semibold text-base">TV Series</h3>
+                </div>
+                <p className="text-xs text-gray-400 mb-4">
+                  {seriesCategories.length} categories available
+                </p>
+              </div>
+              <button
+                onClick={() => setActiveModalType('series')}
+                className="w-full py-2 bg-gray-800 hover:bg-gray-700 text-indigo-300 text-xs font-semibold rounded-lg transition-colors"
+              >
+                Organize Shows ({seriesCategories.length})
+              </button>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* Account Info */}
       {isXtream && userInfo && serverInfo && (
         <section>
           <div className="mb-6 border-b border-gray-800 pb-4">
@@ -50,13 +166,14 @@ const SettingsPage: React.FC = () => {
               value={`${userInfo.active_cons || 0} / ${userInfo.max_connections || 'Unlimited'}`} 
               icon={Tv} 
             />
-            <InfoRow label="Created At" value={userInfo.created_at ? formatDate(parseInt(userInfo.created_at) * 1000) : undefined} icon={CalendarIcon} />
+            <InfoRow label="Created At" value={userInfo.created_at ? formatDate(parseInt(userInfo.created_at) * 1000) : undefined} icon={Clock} />
             <InfoRow label="Is Trial" value={userInfo.is_trial === '1' ? 'Yes' : 'No'} icon={Info} />
             <InfoRow label="Allowed Formats" value={userInfo.allowed_output_formats?.join(', ')} icon={Shield} />
           </div>
         </section>
       )}
 
+      {/* Server Info */}
       {isXtream && serverInfo && (
         <section>
           <div className="mb-6 border-b border-gray-800 pb-4">
@@ -74,6 +191,7 @@ const SettingsPage: React.FC = () => {
         </section>
       )}
 
+      {/* Profiles */}
       <section>
         <div className="mb-6 border-b border-gray-800 pb-4">
           <h2 className="text-2xl font-bold text-white flex items-center">
@@ -86,6 +204,7 @@ const SettingsPage: React.FC = () => {
         <AccountManager />
       </section>
 
+      {/* About */}
       <section>
         <div className="mb-6 border-b border-gray-800 pb-4">
           <h2 className="text-2xl font-bold text-white flex items-center">
@@ -107,18 +226,33 @@ const SettingsPage: React.FC = () => {
         </div>
       </section>
 
+      {/* Modals */}
+      {activeModalType === 'live' && (
+        <CategoryManagerModal
+          isOpen={true}
+          onClose={() => setActiveModalType(null)}
+          type="live"
+          categories={liveCategories}
+        />
+      )}
+      {activeModalType === 'vod' && (
+        <CategoryManagerModal
+          isOpen={true}
+          onClose={() => setActiveModalType(null)}
+          type="vod"
+          categories={vodCategories}
+        />
+      )}
+      {activeModalType === 'series' && (
+        <CategoryManagerModal
+          isOpen={true}
+          onClose={() => setActiveModalType(null)}
+          type="series"
+          categories={seriesCategories}
+        />
+      )}
     </div>
   );
 };
-
-// Helper component for calendar icon since it's not imported at top level to avoid clutter
-const CalendarIcon = (props: any) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
-    <line x1="16" y1="2" x2="16" y2="6"></line>
-    <line x1="8" y1="2" x2="8" y2="6"></line>
-    <line x1="3" y1="10" x2="21" y2="10"></line>
-  </svg>
-);
 
 export default SettingsPage;
