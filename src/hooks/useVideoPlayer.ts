@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Hls from 'hls.js';
+import mpegts from 'mpegts.js';
 import { usePlayerStore, AntiLagMode } from '@/store/usePlayerStore';
 
 export function useVideoPlayer(
@@ -23,6 +24,7 @@ export function useVideoPlayer(
   } = usePlayerStore();
 
   const hlsRef = useRef<Hls | null>(null);
+  const mpegtsPlayerRef = useRef<mpegts.Player | null>(null);
   const mediaRecoveriesRef = useRef<number>(0);
   const networkErrorRetriesRef = useRef<number>(0);
   const lastTimeRef = useRef<number>(0);
@@ -52,6 +54,17 @@ export function useVideoPlayer(
       }
       hlsRef.current = null;
     }
+    if (mpegtsPlayerRef.current) {
+      try {
+        mpegtsPlayerRef.current.pause();
+        mpegtsPlayerRef.current.unload();
+        mpegtsPlayerRef.current.detachMediaElement();
+        mpegtsPlayerRef.current.destroy();
+      } catch (e) {
+        console.warn('Error destroying mpegts player:', e);
+      }
+      mpegtsPlayerRef.current = null;
+    }
     if (videoRef.current) {
       videoRef.current.removeAttribute('src');
       try {
@@ -62,7 +75,7 @@ export function useVideoPlayer(
     }
   }, [videoRef, clearBufferingWatchdog]);
 
-  // Fast-reacting HLS config tuned for low latency & fast initial buffer
+  // Fast-reacting HLS config tuned for low latency
   const getHlsConfig = useCallback((mode: AntiLagMode): Partial<Hls['config']> => {
     const baseConfig = {
       enableWorker: true,
@@ -73,7 +86,6 @@ export function useVideoPlayer(
       nudgeOffset: 0.2,
       nudgeMaxRetry: 8,
       maxFragLookUpTolerance: 0.3,
-      // Aggressive fast timeouts so we never hang indefinitely on dead streams
       fragLoadingTimeOut: 10000,
       manifestLoadingTimeOut: 8000,
       levelLoadingTimeOut: 8000,
@@ -144,7 +156,6 @@ export function useVideoPlayer(
         if (hlsRef.current) {
           hlsRef.current.startLoad(0);
         }
-        // Give 4 more seconds, then show helpful action buttons instead of hanging
         setTimeout(() => {
           if (video && video.paused && video.readyState < 2) {
             setIsLoading(false);
@@ -152,9 +163,9 @@ export function useVideoPlayer(
               'Stream connection is taking longer than usual. Use "Switch Route" or "Switch Format" below to reconnect.'
             );
           }
-        }, 4000);
+        }, 3500);
       }
-    }, 8000);
+    }, 7000);
 
     const onPlaybackStarted = () => {
       clearBufferingWatchdog();
@@ -241,27 +252,56 @@ export function useVideoPlayer(
       setIsLoading(false);
     };
 
-    const isHlsUrl =
-      src.includes('.m3u8') ||
-      src.includes('m3u8') ||
-      (type === 'live' && !src.endsWith('.mp4'));
+    const isExplicitM3u8 = src.includes('.m3u8') || src.includes('m3u8');
+    const isRawTsStream = src.endsWith('.ts') || src.includes('.ts?') || (type === 'live' && !isExplicitM3u8);
 
-    if (isHlsUrl && Hls.isSupported()) {
+    // 1. Raw MPEG-TS Live Stream -> Handled by mpegts.js (low latency continuous demuxer)
+    if (isRawTsStream && typeof window !== 'undefined' && mpegts.isSupported()) {
+      try {
+        console.log('[OnyxStream Engine] Booting mpegts.js player for live stream:', src);
+        const player = mpegts.createPlayer(
+          {
+            type: 'mpegts',
+            isLive: true,
+            url: src,
+          },
+          {
+            enableWorker: true,
+            lazyLoad: false,
+            liveBufferLatencyChasing: true,
+            liveBufferLatencyMaxLatency: 3.0,
+            liveBufferLatencyMinRemain: 0.8,
+          }
+        );
+
+        mpegtsPlayerRef.current = player;
+        player.attachMediaElement(video);
+        player.load();
+
+        player.on(mpegts.Events.ERROR, (errType: string, errDetail: string) => {
+          console.warn('[mpegts error]', errType, errDetail);
+          if (errType === mpegts.ErrorTypes.NETWORK_ERROR) {
+            setError('Network Error: Stream server dropped connection. Tap "Switch Route" to retry.');
+            setIsLoading(false);
+          }
+        });
+
+        if (autoPlay) {
+          player.play()?.catch((err: any) => console.warn('[mpegts autoplay wait]', err.message));
+        }
+        return;
+      } catch (err: any) {
+        console.warn('[mpegts boot failed, falling back to HLS]:', err.message);
+      }
+    }
+
+    // 2. HLS Stream (.m3u8 playlist) -> Handled by Hls.js
+    if (isExplicitM3u8 && Hls.isSupported()) {
       const hlsConfig = getHlsConfig(antiLagMode);
       const hls = new Hls(hlsConfig);
       hlsRef.current = hls;
 
-      // Handle raw TS stream on HLS engine by wrapping into a virtual manifest
-      if (src.endsWith('.ts') || (type === 'live' && !src.includes('.m3u8'))) {
-        const virtualM3u8 = `#EXTM3U\n#EXT-X-VERSION:3\n#EXT-X-TARGETDURATION:60\n#EXT-X-MEDIA-SEQUENCE:0\n#EXTINF:60.0,\n${src}\n`;
-        const blob = new Blob([virtualM3u8], { type: 'application/vnd.apple.mpegurl' });
-        const blobUrl = URL.createObjectURL(blob);
-        blobUrlRef.current = blobUrl;
-        hls.loadSource(blobUrl);
-      } else {
-        hls.loadSource(src);
-      }
-
+      hls.loadSource(src);
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, () => {
@@ -323,13 +363,13 @@ export function useVideoPlayer(
           }
         }
       });
-    } else if (isHlsUrl && video.canPlayType('application/vnd.apple.mpegurl')) {
+    } else if (isExplicitM3u8 && video.canPlayType('application/vnd.apple.mpegurl')) {
       // Native Apple Safari HLS
       video.src = src;
       video.load();
       if (autoPlay) video.play().catch(console.warn);
     } else {
-      // Direct media playback (MP4, MKV, direct files)
+      // 3. Direct media playback (MP4, MKV, VOD direct files)
       video.src = src;
       video.load();
       if (autoPlay) video.play().catch(console.warn);

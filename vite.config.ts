@@ -33,7 +33,7 @@ function rewriteM3U8(content: string, baseUrl: string, proxyEndpoint = '/proxy?u
   }).join('\n');
 }
 
-// Development streaming proxy plugin to mirror production server.js proxy
+// Development streaming proxy plugin
 function streamProxyPlugin() {
   return {
     name: 'stream-proxy',
@@ -70,55 +70,56 @@ function streamProxyPlugin() {
           return res.end();
         }
 
-        const isLikelyM3u8 = targetUrl.toLowerCase().includes('.m3u8') || targetUrl.includes('/live/');
-
         try {
-          if (isLikelyM3u8) {
-            const response = await axios({
-              method: 'get',
-              url: targetUrl,
-              responseType: 'text',
-              headers: outgoingHeaders,
-              timeout: 10000,
-              maxRedirects: 5,
-              validateStatus: (status) => status < 400,
-            });
-
-            const dataStr = typeof response.data === 'string' ? response.data : '';
-            if (dataStr.includes('#EXTM3U') || targetUrl.toLowerCase().includes('.m3u8')) {
-              const finalUrl = (response.request as any)?.res?.responseUrl || targetUrl;
-              const rewritten = rewriteM3U8(dataStr, finalUrl, '/proxy?url=');
-              res.statusCode = 200;
-              res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
-              return res.end(rewritten);
-            }
-          }
-
-          const response = await axios({
+          const upstreamResponse = await axios({
             method: 'get',
             url: targetUrl,
             responseType: 'stream',
             headers: outgoingHeaders,
-            timeout: 20000,
+            timeout: 15000,
             maxRedirects: 5,
-            maxContentLength: Infinity,
-            maxBodyLength: Infinity,
+            validateStatus: (status) => status < 400,
           });
 
-          res.statusCode = response.status;
-          const headers = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
-          for (const h of headers) {
-            if (response.headers[h]) res.setHeader(h, response.headers[h]);
-          }
-          if (!response.headers['accept-ranges']) res.setHeader('Accept-Ranges', 'bytes');
+          const contentType = (upstreamResponse.headers['content-type'] || '').toLowerCase();
+          const isExplicitM3u8 = targetUrl.toLowerCase().includes('.m3u8') || targetUrl.toLowerCase().includes('m3u8');
+          const isM3u8ContentType = contentType.includes('mpegurl') || contentType.includes('application/x-mpegurl');
 
-          req.on('close', () => {
-            if (response.data && typeof response.data.destroy === 'function') {
-              response.data.destroy();
+          if (isExplicitM3u8 || isM3u8ContentType) {
+            let manifestText = '';
+            upstreamResponse.data.setEncoding('utf-8');
+            upstreamResponse.data.on('data', (chunk: any) => {
+              manifestText += chunk;
+            });
+            upstreamResponse.data.on('end', () => {
+              const finalUrl = (upstreamResponse.request as any)?.res?.responseUrl || targetUrl;
+              const rewritten = rewriteM3U8(manifestText, finalUrl, '/proxy?url=');
+              res.statusCode = 200;
+              res.setHeader('Content-Type', 'application/vnd.apple.mpegurl; charset=utf-8');
+              res.end(rewritten);
+            });
+            upstreamResponse.data.on('error', (err: any) => {
+              if (!res.headersSent) {
+                res.statusCode = 502;
+                res.end('Error buffering manifest');
+              }
+            });
+          } else {
+            res.statusCode = upstreamResponse.status;
+            const headers = ['content-type', 'content-length', 'content-range', 'accept-ranges'];
+            for (const h of headers) {
+              if (upstreamResponse.headers[h]) res.setHeader(h, upstreamResponse.headers[h]);
             }
-          });
+            if (!upstreamResponse.headers['accept-ranges']) res.setHeader('Accept-Ranges', 'bytes');
 
-          return response.data.pipe(res);
+            req.on('close', () => {
+              if (upstreamResponse.data && typeof upstreamResponse.data.destroy === 'function') {
+                upstreamResponse.data.destroy();
+              }
+            });
+
+            return upstreamResponse.data.pipe(res);
+          }
         } catch (err: any) {
           console.warn('[Vite Proxy Warn]', err.message);
           if (!res.headersSent) {
