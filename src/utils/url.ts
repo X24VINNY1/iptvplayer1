@@ -61,30 +61,27 @@ export const extractRawStreamUrl = (url: string): string => {
 };
 
 /**
- * Resolves the playback stream URL with auto-selection or explicit mode override.
+ * Resolves the playback stream URL:
+ * - On Web (browser): ALWAYS routes through the streaming proxy (/proxy?url=...) so the server
+ *   fetches the media stream directly from the Xtream server and streams it to the website with full CORS and proper MIME types.
+ * - On Native Android: Uses direct connection where cleartext traffic and native player engines are active.
  */
 export const getStreamPlaybackUrl = (rawUrl: string, mode?: 'proxy' | 'direct'): string => {
   if (!rawUrl) return '';
 
   const cleanRawUrl = extractRawStreamUrl(rawUrl);
 
-  if (mode === 'direct') {
+  // If running inside Native Android APK and not explicitly asking for proxy, direct is optimal
+  if (Capacitor.isNativePlatform() && mode !== 'proxy') {
     return cleanRawUrl;
   }
 
-  if (mode === 'proxy') {
-    return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
-  }
-
-  // Inside Native Android APK, cleartext traffic is enabled so direct stream URL is optimal
-  if (Capacitor.isNativePlatform()) {
+  // Explicit direct override (if forced)
+  if (mode === 'direct' && Capacitor.isNativePlatform()) {
     return cleanRawUrl;
   }
 
-  // In Web browser environments on HTTPS, route through the streaming proxy to bypass Mixed Content & CORS
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:' && cleanRawUrl.startsWith('http://')) {
-    return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
-  }
-
-  return cleanRawUrl;
+  // On ALL Web browsers (HTTP and HTTPS), route through the server proxy so the server
+  // fetches the Xtream URL and sends the video stream directly to the website
+  return `/proxy?url=${encodeURIComponent(cleanRawUrl)}`;
 };

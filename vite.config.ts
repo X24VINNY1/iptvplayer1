@@ -116,44 +116,60 @@ function streamProxyPlugin() {
 
           const finalUrl = (upstreamResponse.request as any)?.res?.responseUrl || targetUrl;
           const stream = upstreamResponse.data;
+          const cleanUrl = (finalUrl || targetUrl).toLowerCase();
+          const isVod = cleanUrl.includes('/movie/') || cleanUrl.includes('/series/') || 
+                        cleanUrl.includes('.mp4') || cleanUrl.includes('.mkv') || cleanUrl.includes('.avi') || cleanUrl.includes('.webm');
 
-          let hasDecided = false;
+          // 1. VOD Movies & Series: Immediate native pipe streaming with 206 Range & CORS support
+          if (isVod) {
+            res.statusCode = upstreamResponse.status || 200;
+            res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl));
+            res.setHeader('Accept-Ranges', 'bytes');
+            res.setHeader('Access-Control-Allow-Origin', '*');
+
+            const headers = ['content-length', 'content-range', 'content-duration'];
+            for (const h of headers) {
+              if (upstreamResponse.headers[h]) res.setHeader(h, upstreamResponse.headers[h]);
+            }
+
+            req.on('close', () => {
+              if (stream && typeof stream.destroy === 'function') {
+                stream.destroy();
+              }
+            });
+
+            return stream.pipe(res);
+          }
+
+          // 2. Playlists & Live Streams: inspect initial chunk
           let isManifest = false;
           let manifestBuffer = '';
 
-          stream.on('data', (chunk: any) => {
-            if (!hasDecided) {
-              const snippet = chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim();
-              if (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT')) {
-                isManifest = true;
-                manifestBuffer += chunk.toString('utf-8');
-              } else {
-                hasDecided = true;
-                isManifest = false;
-
-                res.statusCode = upstreamResponse.status || 200;
-                const rawContentType = upstreamResponse.headers['content-type'];
-                res.setHeader('Content-Type', determineMimeType(rawContentType, targetUrl, finalUrl));
-
-                const headers = ['content-length', 'content-range', 'accept-ranges', 'content-duration'];
-                for (const h of headers) {
-                  if (upstreamResponse.headers[h]) res.setHeader(h, upstreamResponse.headers[h]);
-                }
-                if (!upstreamResponse.headers['accept-ranges']) res.setHeader('Accept-Ranges', 'bytes');
-
-                res.write(chunk);
-                stream.pipe(res);
-              }
-            } else if (isManifest) {
+          stream.once('data', (chunk: any) => {
+            const snippet = chunk.toString('utf-8', 0, Math.min(chunk.length, 64)).trim();
+            if (snippet.startsWith('#EXTM3U') || snippet.startsWith('#EXT')) {
+              // True M3U8 text manifest
+              isManifest = true;
               manifestBuffer += chunk.toString('utf-8');
-              if (manifestBuffer.length > 1024 * 1024) {
-                hasDecided = true;
-                isManifest = false;
-                res.statusCode = upstreamResponse.status || 200;
-                res.setHeader('Content-Type', 'video/mp2t');
-                res.write(Buffer.from(manifestBuffer, 'utf-8'));
-                stream.pipe(res);
+
+              stream.on('data', (nextChunk: any) => {
+                manifestBuffer += nextChunk.toString('utf-8');
+              });
+            } else {
+              // Binary Live Stream (e.g. MPEG-TS) -> pipe immediately!
+              isManifest = false;
+              res.statusCode = upstreamResponse.status || 200;
+              res.setHeader('Content-Type', determineMimeType(upstreamResponse.headers['content-type'], targetUrl, finalUrl));
+              res.setHeader('Accept-Ranges', 'bytes');
+              res.setHeader('Access-Control-Allow-Origin', '*');
+
+              const headers = ['content-length', 'content-range', 'content-duration'];
+              for (const h of headers) {
+                if (upstreamResponse.headers[h]) res.setHeader(h, upstreamResponse.headers[h]);
               }
+
+              res.write(chunk);
+              stream.pipe(res);
             }
           });
 

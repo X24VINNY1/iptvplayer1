@@ -29,11 +29,8 @@ const PlayerPage: React.FC = () => {
     : defaultExt;
   const [currentExt, setCurrentExt] = useState<string>(validExt);
 
-  // Connection mode: Proxy by default on HTTPS web to bypass CORS/mixed content, Direct on Android/HTTP
-  const initialMode: 'proxy' | 'direct' = 
-    !Capacitor.isNativePlatform() && typeof window !== 'undefined' && window.location.protocol === 'https:'
-      ? 'proxy'
-      : 'direct';
+  // Connection mode: Proxy by default on web so the server fetches the Xtream URL and streams to the website
+  const initialMode: 'proxy' | 'direct' = Capacitor.isNativePlatform() ? 'direct' : 'proxy';
   const [connectionMode, setConnectionMode] = useState<'proxy' | 'direct'>(initialMode);
 
   const [streamUrl, setStreamUrl] = useState<string>('');
